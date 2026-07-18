@@ -1,9 +1,11 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:sukashi_form/comparison/comparison_controller.dart';
 import 'package:sukashi_form/data/clip_repository.dart';
 import 'package:sukashi_form/data/comparison_pair_repository.dart';
 import 'package:sukashi_form/data/frame_cache_service.dart';
@@ -11,6 +13,7 @@ import 'package:sukashi_form/models/clip.dart';
 import 'package:sukashi_form/models/comparison_pair.dart';
 import 'package:sukashi_form/providers/clip_providers.dart';
 import 'package:sukashi_form/screens/compare_screen.dart';
+import 'package:sukashi_form/widgets/comparison_frame_view.dart';
 
 void main() {
   late Directory directory;
@@ -114,6 +117,224 @@ void main() {
 
     expect(find.text('先頭を基準に同期'), findsOneWidget);
     expect(await pairRepository.loadAll(), isEmpty);
+  });
+
+  testWidgets('変換を表示へ適用しcacheWidthでデコードする', (tester) async {
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: SizedBox(
+          width: 300,
+          height: 200,
+          child: ComparisonFrameView(
+            clipId: 'a',
+            path: 'missing.jpg',
+            transform: AlignmentTransform(
+              dx: 12,
+              dy: -7,
+              scale: 1.5,
+              rotation: 0.25,
+            ),
+            cacheWidth: 640,
+          ),
+        ),
+      ),
+    );
+
+    final translation = tester.widget<Transform>(
+      find.byKey(const Key('frame-translation-a')),
+    );
+    final scale = tester.widget<Transform>(
+      find.byKey(const Key('frame-scale-a')),
+    );
+    final rotation = tester.widget<Transform>(
+      find.byKey(const Key('frame-rotation-a')),
+    );
+    expect(translation.transform.getTranslation().x, 12);
+    expect(translation.transform.getTranslation().y, -7);
+    expect(scale.transform.storage[0], 1.5);
+    expect(rotation.transform.storage[0], closeTo(math.cos(0.25), 0.0001));
+    final image = tester.widget<Image>(find.byKey(const Key('frame-image-a')));
+    expect((image.image as ResizeImage).width, 640);
+  });
+
+  testWidgets('モード切替で時刻と変換を維持し透過と分割軸を保存する', (tester) async {
+    await _pump(
+      tester,
+      <Clip>[_clip('a', 5000), _clip('b', 5000)],
+      (_) => _completedSession(),
+      clipRepository,
+      pairRepository,
+    );
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 100)),
+    );
+    await _pumpFrames(tester, 20);
+
+    expect(find.byKey(const Key('overlay-view')), findsOneWidget);
+    expect(find.byKey(const Key('overlay-opacity-slider')), findsOneWidget);
+    expect(find.byKey(const Key('frame-number-A')), findsNothing);
+    await tester.drag(
+      find.byKey(const Key('comparison-seek')),
+      const Offset(120, 0),
+    );
+    await tester.pump();
+    final positionBefore = tester
+        .widget<Slider>(find.byKey(const Key('comparison-seek')))
+        .value;
+
+    await tester.ensureVisible(find.byKey(const Key('alignment-mode-toggle')));
+    await tester.tap(find.byKey(const Key('alignment-mode-toggle')));
+    await tester.pump();
+    expect(find.byKey(const Key('comparison-seek')), findsNothing);
+    expect(find.byKey(const Key('reset-alignment')), findsOneWidget);
+    await tester.drag(
+      find.byKey(const Key('alignment-gesture-area')),
+      const Offset(24, 18),
+    );
+    await tester.pump();
+    final translated = tester.widget<Transform>(
+      find.byKey(const Key('frame-translation-b')),
+    );
+    expect(translated.transform.getTranslation().x, closeTo(24, 0.1));
+    expect(translated.transform.getTranslation().y, closeTo(18, 0.1));
+    await tester.tap(find.byKey(const Key('finish-alignment')));
+    await tester.pump();
+
+    await tester.tap(find.text('分割'));
+    await tester.pump();
+    expect(find.byKey(const Key('overlay-opacity-slider')), findsNothing);
+    expect(find.byKey(const Key('split-axis-selector')), findsOneWidget);
+    expect(
+      tester.widget<Slider>(find.byKey(const Key('comparison-seek'))).value,
+      positionBefore,
+    );
+    expect(
+      tester
+          .widget<Transform>(find.byKey(const Key('frame-translation-b')))
+          .transform
+          .getTranslation()
+          .x,
+      closeTo(24, 0.1),
+    );
+
+    await tester.ensureVisible(find.text('左右'));
+    await tester.tap(find.text('左右'));
+    await tester.pump();
+    expect(find.byKey(const Key('split-view-horizontal')), findsOneWidget);
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 50)),
+    );
+    final saved = (await pairRepository.loadAll()).single;
+    expect(saved.splitAxis, ComparisonSplitAxis.horizontal);
+    expect(saved.overlayOpacity, 0.5);
+    expect(saved.transforms['b']!.dx, closeTo(24, 0.1));
+    expect(saved.hasSynchronizedReference, isFalse);
+  });
+
+  testWidgets('透過スライダーがBのOpacityへ反映される', (tester) async {
+    await _pump(
+      tester,
+      <Clip>[_clip('a', 5000), _clip('b', 5000)],
+      (_) => _completedSession(),
+      clipRepository,
+      pairRepository,
+    );
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 100)),
+    );
+    await _pumpFrames(tester, 20);
+    await tester.drag(
+      find.byKey(const Key('overlay-opacity-slider')),
+      const Offset(1000, 0),
+    );
+    await tester.pump();
+    expect(
+      tester
+          .widget<Opacity>(find.byKey(const Key('overlay-b-opacity')))
+          .opacity,
+      1,
+    );
+  });
+
+  testWidgets('位置合わせリセットで対象Bを恒等変換に戻して保存する', (tester) async {
+    await _pump(
+      tester,
+      <Clip>[_clip('a', 5000), _clip('b', 5000)],
+      (_) => _completedSession(),
+      clipRepository,
+      pairRepository,
+    );
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 100)),
+    );
+    await _pumpFrames(tester, 20);
+    await tester.ensureVisible(find.byKey(const Key('alignment-mode-toggle')));
+    await tester.tap(find.byKey(const Key('alignment-mode-toggle')));
+    await tester.pump();
+    await tester.drag(
+      find.byKey(const Key('alignment-gesture-area')),
+      const Offset(30, -20),
+    );
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('reset-alignment')));
+    await tester.pump();
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 50)),
+    );
+
+    final transform = tester.widget<Transform>(
+      find.byKey(const Key('frame-translation-b')),
+    );
+    expect(transform.transform.getTranslation().x, 0);
+    expect(transform.transform.getTranslation().y, 0);
+    expect(
+      (await pairRepository.loadAll()).single.transforms['b'],
+      const AlignmentTransform(),
+    );
+  });
+
+  testWidgets('2ポインタ操作でBを拡大縮小・回転する', (tester) async {
+    await _pump(
+      tester,
+      <Clip>[_clip('a', 5000), _clip('b', 5000)],
+      (_) => _completedSession(),
+      clipRepository,
+      pairRepository,
+    );
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 100)),
+    );
+    await _pumpFrames(tester, 20);
+    await tester.ensureVisible(find.byKey(const Key('alignment-mode-toggle')));
+    await tester.tap(find.byKey(const Key('alignment-mode-toggle')));
+    await tester.pump();
+
+    final area = find.byKey(const Key('alignment-gesture-area'));
+    final center = tester.getCenter(area);
+    final first = await tester.startGesture(
+      center + const Offset(-30, 0),
+      pointer: 1,
+    );
+    final second = await tester.startGesture(
+      center + const Offset(30, 0),
+      pointer: 2,
+    );
+    await tester.pump();
+    await first.moveTo(center + const Offset(-60, -30));
+    await second.moveTo(center + const Offset(60, 30));
+    await tester.pump();
+    await first.up();
+    await second.up();
+    await tester.pump();
+
+    final scale = tester.widget<Transform>(
+      find.byKey(const Key('frame-scale-b')),
+    );
+    final rotation = tester.widget<Transform>(
+      find.byKey(const Key('frame-rotation-b')),
+    );
+    expect(scale.transform.storage[0], greaterThan(1));
+    expect(rotation.transform.storage[1].abs(), greaterThan(0.1));
   });
 }
 

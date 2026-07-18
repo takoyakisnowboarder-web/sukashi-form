@@ -109,6 +109,52 @@ void main() {
     expect(await repository.loadAll(), isEmpty);
     expect(await File('${file.path}.broken').exists(), isTrue);
   });
+
+  test('未同期でも変換・分割軸・透過率を保存して復元する', () async {
+    final settings = ComparisonPairSettings(
+      firstClipId: 'a',
+      secondClipId: 'b',
+      referenceTimesMs: const <String, double>{},
+      transforms: const <String, AlignmentTransform>{
+        'a': AlignmentTransform(),
+        'b': AlignmentTransform(dx: 12, dy: -3, scale: 1.2, rotation: 0.1),
+      },
+      hasSynchronizedReference: false,
+      splitAxis: ComparisonSplitAxis.horizontal,
+      overlayOpacity: 0.75,
+    );
+    await repository.savePair(settings);
+
+    final loaded = await repository.loadPair(
+      'b',
+      'a',
+      currentRanges: <String, ComparisonClipRange>{
+        'a': const ComparisonClipRange(startMs: 2000, endMs: 3000),
+        'b': const ComparisonClipRange(startMs: 2000, endMs: 3000),
+      },
+    );
+
+    expect(loaded, settings);
+    expect(loaded!.hasSynchronizedReference, isFalse);
+    expect(loaded.splitAxis, ComparisonSplitAxis.horizontal);
+    expect(loaded.overlayOpacity, 0.75);
+  });
+
+  test('フェーズ4a JSONは同期済み・上下・透過50%として後方互換で読む', () async {
+    final file = File('${directory.path}/comparison_pairs.json');
+    await file.writeAsString(
+      '{"version":1,"pairs":[{'
+      '"clipIds":["a","b"],'
+      '"referenceTimesMs":{"a":1000,"b":2000},'
+      '"transforms":{"a":{"dx":0,"dy":0,"scale":1,"rotation":0},'
+      '"b":{"dx":0,"dy":0,"scale":1,"rotation":0}}}]}',
+    );
+
+    final loaded = (await repository.loadAll()).single;
+    expect(loaded.hasSynchronizedReference, isTrue);
+    expect(loaded.splitAxis, ComparisonSplitAxis.vertical);
+    expect(loaded.overlayOpacity, 0.5);
+  });
 }
 
 class _PairDeletionNotifier extends ClipListNotifier {

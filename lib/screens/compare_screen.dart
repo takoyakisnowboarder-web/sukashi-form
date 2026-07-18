@@ -12,6 +12,7 @@ import '../models/clip.dart';
 import '../models/comparison_pair.dart';
 import '../providers/clip_providers.dart';
 import '../providers/frame_extraction_providers.dart';
+import '../widgets/comparison_frame_view.dart';
 
 final comparisonExtractionStarterProvider =
     Provider<FrameExtractionSession Function(Clip)>((ref) {
@@ -20,6 +21,8 @@ final comparisonExtractionStarterProvider =
     });
 
 enum _ReferenceStep { none, clipA, clipB }
+
+enum ComparisonDisplayMode { overlay, split }
 
 class CompareScreen extends ConsumerStatefulWidget {
   const CompareScreen({required this.clipIds, super.key});
@@ -47,6 +50,13 @@ class _CompareScreenState extends ConsumerState<CompareScreen>
   _ReferenceStep _referenceStep = _ReferenceStep.none;
   double? _draftReferenceA;
   double? _draftReferenceB;
+  ComparisonDisplayMode _displayMode = ComparisonDisplayMode.overlay;
+  ComparisonSplitAxis _splitAxis = ComparisonSplitAxis.vertical;
+  double _overlayOpacity = 0.5;
+  bool _alignmentMode = false;
+  String? _alignmentTargetClipId;
+  AlignmentTransform? _gestureStartTransform;
+  Offset? _gestureStartFocalPoint;
 
   @override
   void initState() {
@@ -172,9 +182,14 @@ class _CompareScreenState extends ConsumerState<CompareScreen>
       _controller = ComparisonController(
         trackA: tracks[0],
         trackB: tracks[1],
-        referenceTimesMs: saved?.referenceTimesMs,
+        referenceTimesMs: saved?.hasSynchronizedReference == true
+            ? saved!.referenceTimesMs
+            : null,
         transforms: saved?.transforms,
       );
+      _splitAxis = saved?.splitAxis ?? ComparisonSplitAxis.vertical;
+      _overlayOpacity = saved?.overlayOpacity ?? 0.5;
+      _alignmentTargetClipId = tracks[1].clipId;
       _precacheUpcoming(_controller!);
       setState(() {});
     } on FrameExtractionCancelled {
@@ -212,12 +227,21 @@ class _CompareScreenState extends ConsumerState<CompareScreen>
           final file = File(entry.$1.frames[next].path);
           if (file.existsSync()) {
             unawaited(
-              precacheImage(FileImage(file), context).catchError((_) {}),
+              precacheImage(
+                ResizeImage.resizeIfNeeded(_decodeWidth, null, FileImage(file)),
+                context,
+              ).catchError((_) {}),
             );
           }
         }
       }
     }
+  }
+
+  int get _decodeWidth {
+    if (!mounted) return 720;
+    final media = MediaQuery.of(context);
+    return (media.size.width * media.devicePixelRatio).round().clamp(1, 1280);
   }
 
   @override
@@ -289,29 +313,77 @@ class _CompareScreenState extends ConsumerState<CompareScreen>
       _referenceStep == _ReferenceStep.clipB,
       controller,
     );
-    final indexA = controller.trackA.frames.indexOf(frameA);
-    final indexB = controller.trackB.frames.indexOf(frameB);
-    return ListView(
-      key: const Key('comparison-scroll'),
-      // 下端はシステムのナビゲーションバー/ジェスチャー領域を避ける。
-      // これがないと最下部の「基準を合わせる」ボタンがナビバーと重なり、
-      // タップがナビバーに吸われて誤ってホームに戻る。
-      padding: EdgeInsets.fromLTRB(
-        12,
-        12,
-        12,
-        12 + MediaQuery.viewPaddingOf(context).bottom,
+    return SafeArea(
+      top: false,
+      bottom: false,
+      child: Padding(
+        padding: EdgeInsets.fromLTRB(
+          12,
+          8,
+          12,
+          8 + MediaQuery.viewPaddingOf(context).bottom,
+        ),
+        child: Column(
+          children: <Widget>[
+            SegmentedButton<ComparisonDisplayMode>(
+              key: const Key('display-mode-selector'),
+              segments: const <ButtonSegment<ComparisonDisplayMode>>[
+                ButtonSegment(
+                  value: ComparisonDisplayMode.overlay,
+                  label: Text('透過'),
+                  icon: Icon(Icons.layers),
+                ),
+                ButtonSegment(
+                  value: ComparisonDisplayMode.split,
+                  label: Text('分割'),
+                  icon: Icon(Icons.splitscreen),
+                ),
+              ],
+              selected: <ComparisonDisplayMode>{_displayMode},
+              onSelectionChanged: (selection) => setState(() {
+                _displayMode = selection.single;
+              }),
+            ),
+            const SizedBox(height: 8),
+            Expanded(
+              child: GestureDetector(
+                key: const Key('alignment-gesture-area'),
+                behavior: HitTestBehavior.opaque,
+                onScaleStart: _alignmentMode
+                    ? (details) => _onAlignmentStart(controller, details)
+                    : null,
+                onScaleUpdate: _alignmentMode
+                    ? (details) => _onAlignmentUpdate(controller, details)
+                    : null,
+                onScaleEnd: _alignmentMode
+                    ? (_) => unawaited(_savePair(controller))
+                    : null,
+                child: _videoArea(controller, frameA, frameB),
+              ),
+            ),
+            const SizedBox(height: 6),
+            ConstrainedBox(
+              constraints: BoxConstraints(
+                maxHeight:
+                    _alignmentMode || _referenceStep != _ReferenceStep.none
+                    ? 190
+                    : 310,
+              ),
+              child: SingleChildScrollView(
+                key: const Key('comparison-scroll'),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: _alignmentMode
+                      ? _alignmentControls(controller)
+                      : _referenceStep == _ReferenceStep.none
+                      ? _normalControls(controller)
+                      : _referenceControls(controller),
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
-      children: <Widget>[
-        _framePanel('A', frameA, indexA, controller.trackA.frames.length),
-        const SizedBox(height: 8),
-        _framePanel('B', frameB, indexB, controller.trackB.frames.length),
-        const SizedBox(height: 8),
-        if (_referenceStep == _ReferenceStep.none)
-          ..._normalControls(controller)
-        else
-          ..._referenceControls(controller),
-      ],
     );
   }
 
@@ -325,33 +397,197 @@ class _CompareScreenState extends ConsumerState<CompareScreen>
     return track.frames[_nearestIndex(track.frames, draft)];
   }
 
-  Widget _framePanel(
-    String label,
-    ComparisonFrame frame,
-    int index,
-    int total,
+  Widget _videoArea(
+    ComparisonController controller,
+    ComparisonFrame frameA,
+    ComparisonFrame frameB,
   ) {
-    return Column(
+    final a = _frameLayer('A', controller.trackA.clipId, frameA, controller);
+    final b = _frameLayer('B', controller.trackB.clipId, frameB, controller);
+    if (_displayMode == ComparisonDisplayMode.overlay) {
+      return ColoredBox(
+        key: const Key('overlay-view'),
+        color: Colors.black,
+        child: Stack(
+          fit: StackFit.expand,
+          children: <Widget>[
+            a,
+            Opacity(
+              key: const Key('overlay-b-opacity'),
+              opacity: _overlayOpacity,
+              child: b,
+            ),
+          ],
+        ),
+      );
+    }
+    final panels = <Widget>[
+      Expanded(
+        child: ColoredBox(color: Colors.black, child: a),
+      ),
+      const SizedBox(width: 2, height: 2),
+      Expanded(
+        child: ColoredBox(color: Colors.black, child: b),
+      ),
+    ];
+    return KeyedSubtree(
+      key: Key('split-view-${_splitAxis.name}'),
+      child: _splitAxis == ComparisonSplitAxis.vertical
+          ? Column(children: panels)
+          : Row(children: panels),
+    );
+  }
+
+  Widget _frameLayer(
+    String label,
+    String clipId,
+    ComparisonFrame frame,
+    ComparisonController controller,
+  ) {
+    return Stack(
+      fit: StackFit.expand,
       children: <Widget>[
-        AspectRatio(
-          aspectRatio: 16 / 9,
-          child: ColoredBox(
-            color: Colors.black,
-            child: Image.file(
-              File(frame.path),
-              fit: BoxFit.contain,
-              errorBuilder: (_, _, _) => const Center(
-                child: Icon(Icons.broken_image, color: Colors.white),
-              ),
+        ComparisonFrameView(
+          clipId: clipId,
+          path: frame.path,
+          transform: controller.transformFor(clipId),
+          cacheWidth: _decodeWidth,
+        ),
+        Positioned(
+          left: 8,
+          top: 8,
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              color: Colors.black54,
+              borderRadius: BorderRadius.circular(4),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+              child: Text(label, style: const TextStyle(color: Colors.white)),
             ),
           ),
         ),
-        Text('$label: ${index + 1}/$total', key: Key('frame-number-$label')),
       ],
     );
   }
 
+  void _onAlignmentStart(
+    ComparisonController controller,
+    ScaleStartDetails details,
+  ) {
+    final target = _alignmentTargetClipId ?? controller.trackB.clipId;
+    _gestureStartTransform = controller.transformFor(target);
+    _gestureStartFocalPoint = details.localFocalPoint;
+  }
+
+  void _onAlignmentUpdate(
+    ComparisonController controller,
+    ScaleUpdateDetails details,
+  ) {
+    final target = _alignmentTargetClipId ?? controller.trackB.clipId;
+    final original = _gestureStartTransform;
+    final focal = _gestureStartFocalPoint;
+    if (original == null || focal == null) return;
+    final delta = details.localFocalPoint - focal;
+    controller.setTransform(
+      target,
+      AlignmentTransform(
+        dx: original.dx + delta.dx,
+        dy: original.dy + delta.dy,
+        scale: (original.scale * details.scale).clamp(0.25, 4),
+        rotation: original.rotation + details.rotation,
+      ),
+    );
+    setState(() {});
+  }
+
+  List<Widget> _alignmentControls(ComparisonController controller) => <Widget>[
+    Row(
+      children: <Widget>[
+        const Expanded(child: Text('位置合わせ対象')),
+        SegmentedButton<String>(
+          key: const Key('alignment-target-selector'),
+          segments: <ButtonSegment<String>>[
+            ButtonSegment(
+              value: controller.trackA.clipId,
+              label: const Text('A'),
+            ),
+            ButtonSegment(
+              value: controller.trackB.clipId,
+              label: const Text('B'),
+            ),
+          ],
+          selected: <String>{
+            _alignmentTargetClipId ?? controller.trackB.clipId,
+          },
+          onSelectionChanged: (selection) => setState(() {
+            _alignmentTargetClipId = selection.single;
+          }),
+        ),
+      ],
+    ),
+    const SizedBox(height: 6),
+    Row(
+      children: <Widget>[
+        Expanded(
+          child: OutlinedButton.icon(
+            key: const Key('reset-alignment'),
+            onPressed: () async {
+              final target = _alignmentTargetClipId ?? controller.trackB.clipId;
+              controller.setTransform(target, const AlignmentTransform());
+              setState(() {});
+              await _savePair(controller);
+            },
+            icon: const Icon(Icons.restart_alt),
+            label: const Text('リセット'),
+          ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: FilledButton.icon(
+            key: const Key('finish-alignment'),
+            onPressed: () => setState(() => _alignmentMode = false),
+            icon: const Icon(Icons.check),
+            label: const Text('完了'),
+          ),
+        ),
+      ],
+    ),
+    const Text('ドラッグ: 移動  ピンチ: 拡大縮小  2本指: 回転', textAlign: TextAlign.center),
+  ];
+
   List<Widget> _normalControls(ComparisonController controller) => <Widget>[
+    Row(
+      children: <Widget>[
+        FilterChip(
+          key: const Key('alignment-mode-toggle'),
+          avatar: const Icon(Icons.open_with),
+          label: const Text('位置合わせ'),
+          selected: false,
+          onSelected: (_) => setState(() {
+            controller.setPlaying(false);
+            _alignmentTargetClipId ??= controller.trackB.clipId;
+            _alignmentMode = true;
+          }),
+        ),
+        const Spacer(),
+        Text(controller.hasSynchronizedReference ? '同期済み' : '先頭を基準に同期'),
+        TextButton(
+          key: const Key('start-reference'),
+          onPressed: () => setState(() {
+            controller.setPlaying(false);
+            _draftReferenceA = controller
+                .frameFor(controller.trackA.clipId)
+                .timeMs;
+            _draftReferenceB = controller
+                .frameFor(controller.trackB.clipId)
+                .timeMs;
+            _referenceStep = _ReferenceStep.clipA;
+          }),
+          child: Text(controller.hasSynchronizedReference ? '取り直す' : '基準を合わせる'),
+        ),
+      ],
+    ),
     Slider(
       key: const Key('comparison-seek'),
       value: controller.positionMs,
@@ -404,22 +640,59 @@ class _CompareScreenState extends ConsumerState<CompareScreen>
           ),
       ],
     ),
-    const SizedBox(height: 8),
-    Text(
-      controller.hasSynchronizedReference ? '同期済み' : '先頭を基準に同期',
-      textAlign: TextAlign.center,
-    ),
-    OutlinedButton(
-      key: const Key('start-reference'),
-      onPressed: () => setState(() {
-        controller.setPlaying(false);
-        _draftReferenceA = controller.frameFor(controller.trackA.clipId).timeMs;
-        _draftReferenceB = controller.frameFor(controller.trackB.clipId).timeMs;
-        _referenceStep = _ReferenceStep.clipA;
-      }),
-      child: Text(controller.hasSynchronizedReference ? '基準を取り直す' : '基準を合わせる'),
-    ),
+    if (_displayMode == ComparisonDisplayMode.overlay)
+      Row(
+        children: <Widget>[
+          const Text('B 透過'),
+          Expanded(
+            child: Slider(
+              key: const Key('overlay-opacity-slider'),
+              value: _overlayOpacity,
+              divisions: 20,
+              label: '${(_overlayOpacity * 100).round()}%',
+              onChanged: (value) => setState(() => _overlayOpacity = value),
+              onChangeEnd: (_) => unawaited(_savePair(controller)),
+            ),
+          ),
+          SizedBox(
+            width: 44,
+            child: Text('${(_overlayOpacity * 100).round()}%'),
+          ),
+        ],
+      ),
+    if (_displayMode == ComparisonDisplayMode.split)
+      SegmentedButton<ComparisonSplitAxis>(
+        key: const Key('split-axis-selector'),
+        segments: const <ButtonSegment<ComparisonSplitAxis>>[
+          ButtonSegment(value: ComparisonSplitAxis.vertical, label: Text('上下')),
+          ButtonSegment(
+            value: ComparisonSplitAxis.horizontal,
+            label: Text('左右'),
+          ),
+        ],
+        selected: <ComparisonSplitAxis>{_splitAxis},
+        onSelectionChanged: (selection) {
+          setState(() => _splitAxis = selection.single);
+          unawaited(_savePair(controller));
+        },
+      ),
   ];
+
+  Future<void> _savePair(ComparisonController controller) async {
+    await ref
+        .read(comparisonPairRepositoryProvider)
+        .savePair(
+          ComparisonPairSettings(
+            firstClipId: controller.trackA.clipId,
+            secondClipId: controller.trackB.clipId,
+            referenceTimesMs: controller.synchronizedReferences,
+            transforms: controller.transforms,
+            hasSynchronizedReference: controller.hasSynchronizedReference,
+            splitAxis: _splitAxis,
+            overlayOpacity: _overlayOpacity,
+          ),
+        );
+  }
 
   List<Widget> _referenceControls(ComparisonController controller) {
     final isA = _referenceStep == _ReferenceStep.clipA;
@@ -452,16 +725,7 @@ class _CompareScreenState extends ConsumerState<CompareScreen>
           }
           controller.setReference(controller.trackA.clipId, _draftReferenceA!);
           controller.setReference(controller.trackB.clipId, _draftReferenceB!);
-          await ref
-              .read(comparisonPairRepositoryProvider)
-              .savePair(
-                ComparisonPairSettings(
-                  firstClipId: controller.trackA.clipId,
-                  secondClipId: controller.trackB.clipId,
-                  referenceTimesMs: controller.synchronizedReferences,
-                  transforms: controller.transforms,
-                ),
-              );
+          await _savePair(controller);
           if (mounted) setState(() => _referenceStep = _ReferenceStep.none);
         },
         child: const Text('ここを基準にする'),

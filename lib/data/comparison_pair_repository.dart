@@ -46,11 +46,15 @@ class ComparisonPairRepository {
       if (pair.key == key) found = pair;
     }
     if (found == null) return null;
-    final valid = found.clipIds.every((id) {
-      final range = currentRanges[id];
-      final reference = found!.referenceTimesMs[id];
-      return range != null && reference != null && range.contains(reference);
-    });
+    final valid =
+        !found.hasSynchronizedReference ||
+        found.clipIds.every((id) {
+          final range = currentRanges[id];
+          final reference = found!.referenceTimesMs[id];
+          return range != null &&
+              reference != null &&
+              range.contains(reference);
+        });
     if (valid) return found;
     await _saveAll(
       pairs.where((pair) => pair.key != key).toList(growable: false),
