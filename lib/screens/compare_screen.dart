@@ -293,7 +293,15 @@ class _CompareScreenState extends ConsumerState<CompareScreen>
     final indexB = controller.trackB.frames.indexOf(frameB);
     return ListView(
       key: const Key('comparison-scroll'),
-      padding: const EdgeInsets.all(12),
+      // 下端はシステムのナビゲーションバー/ジェスチャー領域を避ける。
+      // これがないと最下部の「基準を合わせる」ボタンがナビバーと重なり、
+      // タップがナビバーに吸われて誤ってホームに戻る。
+      padding: EdgeInsets.fromLTRB(
+        12,
+        12,
+        12,
+        12 + MediaQuery.viewPaddingOf(context).bottom,
+      ),
       children: <Widget>[
         _framePanel('A', frameA, indexA, controller.trackA.frames.length),
         const SizedBox(height: 8),
