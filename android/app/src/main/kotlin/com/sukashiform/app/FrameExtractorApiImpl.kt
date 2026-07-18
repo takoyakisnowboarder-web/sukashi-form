@@ -9,6 +9,7 @@ import java.io.FileOutputStream
 import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
+import kotlin.math.ceil
 import kotlin.math.roundToInt
 
 class FrameExtractorApiImpl(
@@ -180,15 +181,33 @@ class FrameExtractorApiImpl(
             }
 
             sourceFps = sourceFrameCount.toDouble() / (durationMs.toDouble() / 1000.0)
-            val extractionDurationMs = minOf(durationMs, MAX_EXTRACTION_DURATION_MS)
-            val framesInWindow = (
-                sourceFrameCount.toDouble() * extractionDurationMs.toDouble() / durationMs.toDouble()
-            ).roundToInt().coerceIn(1, sourceFrameCount)
+            val rangeStartMs = request.rangeStartMs ?: 0L
+            val requestedRangeEndMs = request.rangeEndMs
+                ?: minOf(durationMs, rangeStartMs + MAX_EXTRACTION_DURATION_MS)
+            require(rangeStartMs in 0 until durationMs) { "Invalid rangeStartMs." }
+            require(requestedRangeEndMs in (rangeStartMs + 1)..durationMs) {
+                "Invalid rangeEndMs."
+            }
+            val isWholeVideoPreview = request.maxFrames <= PREVIEW_MAX_FRAMES &&
+                request.maxLongEdgePx <= PREVIEW_MAX_LONG_EDGE_PX
+            val effectiveRangeEndMs = if (isWholeVideoPreview) {
+                requestedRangeEndMs
+            } else {
+                minOf(requestedRangeEndMs, rangeStartMs + MAX_EXTRACTION_DURATION_MS)
+            }
+            val firstSourceIndex = (
+                sourceFrameCount.toDouble() * rangeStartMs.toDouble() / durationMs.toDouble()
+            ).toInt().coerceIn(0, sourceFrameCount - 1)
+            val endSourceIndexExclusive = ceil(
+                sourceFrameCount.toDouble() * effectiveRangeEndMs.toDouble() / durationMs.toDouble(),
+            ).toInt().coerceIn(firstSourceIndex + 1, sourceFrameCount)
+            val framesInWindow = endSourceIndexExclusive - firstSourceIndex
             val targetFrameCount = minOf(
                 request.maxFrames.coerceAtMost(Int.MAX_VALUE.toLong()).toInt(),
                 framesInWindow,
             )
             val sourceIndices = evenlySpacedIndices(framesInWindow, targetFrameCount)
+                .map { index -> index + firstSourceIndex }
             val outputDirectory = File(request.absoluteOutputDir)
             outputDirectory.mkdirs()
             sendProgress(taskId, 0, targetFrameCount)
@@ -264,8 +283,14 @@ class FrameExtractorApiImpl(
                 sendProgress(taskId, completedFrames, targetFrameCount)
             }
 
-            val isComplete = durationMs <= MAX_EXTRACTION_DURATION_MS &&
-                sourceFrameCount <= request.maxFrames
+            val hasExplicitRange = request.rangeStartMs != null || request.rangeEndMs != null
+            val isComplete = if (isWholeVideoPreview) {
+                effectiveRangeEndMs == requestedRangeEndMs
+            } else if (hasExplicitRange) {
+                effectiveRangeEndMs == requestedRangeEndMs && framesInWindow <= request.maxFrames
+            } else {
+                durationMs <= MAX_EXTRACTION_DURATION_MS && sourceFrameCount <= request.maxFrames
+            }
             return ExtractResult(
                 isComplete = isComplete,
                 frameCount = completedFrames.toLong(),
@@ -407,5 +432,7 @@ class FrameExtractorApiImpl(
     private companion object {
         const val FRAME_BATCH_SIZE = 8
         const val MAX_EXTRACTION_DURATION_MS = 10_000L
+        const val PREVIEW_MAX_FRAMES = 24L
+        const val PREVIEW_MAX_LONG_EDGE_PX = 240L
     }
 }

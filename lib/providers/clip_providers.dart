@@ -72,6 +72,27 @@ class ClipListNotifier extends AsyncNotifier<List<Clip>> {
     });
   }
 
+  Future<void> updateComparisonRange(
+    String id, {
+    required int? startMs,
+    required int? endMs,
+  }) async {
+    final clips = state.value ?? <Clip>[];
+    final updated = clips
+        .map(
+          (clip) => clip.id == id
+              ? clip.withComparisonRange(startMs: startMs, endMs: endMs)
+              : clip,
+        )
+        .toList(growable: false);
+    state = const AsyncLoading<List<Clip>>();
+    state = await AsyncValue.guard(() async {
+      await _repository.saveClips(updated);
+      await _repository.deleteComparisonCache(id);
+      return updated;
+    });
+  }
+
   Future<Clip> importVideoPath(
     String sourcePath, {
     required int durationMs,

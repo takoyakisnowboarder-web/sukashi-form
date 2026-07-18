@@ -57,6 +57,81 @@ void main() {
     expect(client.extractCalls, 1);
   });
 
+  test('範囲が一致すれば再利用し変更すれば再展開する', () async {
+    client.onExtract = (taskId, request) async {
+      await _writeFrames(request, 2);
+      return _result(frameCount: 2);
+    };
+    final firstRange = clip.withComparisonRange(startMs: 100, endMs: 900);
+    final changedRange = clip.withComparisonRange(startMs: 200, endMs: 900);
+
+    await service.startExtraction(firstRange).result;
+    final cached = await service.startExtraction(firstRange).result;
+    await service.startExtraction(changedRange).result;
+
+    expect(cached.fromCache, isTrue);
+    expect(client.extractCalls, 2);
+  });
+
+  test('範囲付き・未設定クリップの値をネイティブ要求へ渡す', () async {
+    final requests = <ExtractRequest>[];
+    client.onExtract = (taskId, request) async {
+      requests.add(request);
+      await _writeFrames(request, 1);
+      return _result(frameCount: 1);
+    };
+
+    await service
+        .startExtraction(clip.withComparisonRange(startMs: 100, endMs: 900))
+        .result;
+    await cacheRepository.deleteClipCache(clip.id);
+    await service.startExtraction(clip).result;
+
+    expect(requests.first.rangeStartMs, 100);
+    expect(requests.first.rangeEndMs, 900);
+    expect(requests.last.rangeStartMs, isNull);
+    expect(requests.last.rangeEndMs, isNull);
+  });
+
+  test('全体プレビューは低解像度24枚以下かつ比較用と別ディレクトリを使う', () async {
+    late ExtractRequest request;
+    client.onExtract = (taskId, value) async {
+      request = value;
+      await _writeFrames(value, 2);
+      return _result(frameCount: 2);
+    };
+    final previewRepository = FrameCacheRepository(
+      clipRepository,
+      rootDirectory: 'frames_preview',
+    );
+    final previewService = FrameCacheService(
+      clipRepository,
+      previewRepository,
+      client,
+      maxLongEdgePx: 240,
+      maxFrames: 24,
+      jpegQuality: 75,
+    );
+
+    await previewService
+        .startExtractionForRange(
+          clip,
+          rangeStartMs: 0,
+          rangeEndMs: clip.durationMs,
+        )
+        .result;
+
+    expect(request.maxFrames, 24);
+    expect(request.maxLongEdgePx, 240);
+    expect(request.absoluteOutputDir, contains('frames_preview'));
+    expect(
+      request.absoluteOutputDir,
+      isNot(
+        contains('${Platform.pathSeparator}frames${Platform.pathSeparator}'),
+      ),
+    );
+  });
+
   test('破損クリップはネイティブ展開を呼ばず拒否する', () async {
     final broken = Clip(
       id: clip.id,

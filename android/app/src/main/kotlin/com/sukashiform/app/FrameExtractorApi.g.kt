@@ -258,7 +258,9 @@ data class ExtractRequest (
   val absoluteOutputDir: String,
   val maxLongEdgePx: Long,
   val maxFrames: Long,
-  val jpegQuality: Long
+  val jpegQuality: Long,
+  val rangeStartMs: Long? = null,
+  val rangeEndMs: Long? = null
 )
  {
   companion object {
@@ -268,7 +270,9 @@ data class ExtractRequest (
       val maxLongEdgePx = pigeonVar_list[2] as Long
       val maxFrames = pigeonVar_list[3] as Long
       val jpegQuality = pigeonVar_list[4] as Long
-      return ExtractRequest(absoluteVideoPath, absoluteOutputDir, maxLongEdgePx, maxFrames, jpegQuality)
+      val rangeStartMs = pigeonVar_list[5] as Long?
+      val rangeEndMs = pigeonVar_list[6] as Long?
+      return ExtractRequest(absoluteVideoPath, absoluteOutputDir, maxLongEdgePx, maxFrames, jpegQuality, rangeStartMs, rangeEndMs)
     }
   }
   fun toList(): List<Any?> {
@@ -278,6 +282,8 @@ data class ExtractRequest (
       maxLongEdgePx,
       maxFrames,
       jpegQuality,
+      rangeStartMs,
+      rangeEndMs,
     )
   }
   override fun equals(other: Any?): Boolean {
@@ -288,7 +294,7 @@ data class ExtractRequest (
       return true
     }
     val other = other as ExtractRequest
-    return FrameExtractorApiPigeonUtils.deepEquals(this.absoluteVideoPath, other.absoluteVideoPath) && FrameExtractorApiPigeonUtils.deepEquals(this.absoluteOutputDir, other.absoluteOutputDir) && FrameExtractorApiPigeonUtils.deepEquals(this.maxLongEdgePx, other.maxLongEdgePx) && FrameExtractorApiPigeonUtils.deepEquals(this.maxFrames, other.maxFrames) && FrameExtractorApiPigeonUtils.deepEquals(this.jpegQuality, other.jpegQuality)
+    return FrameExtractorApiPigeonUtils.deepEquals(this.absoluteVideoPath, other.absoluteVideoPath) && FrameExtractorApiPigeonUtils.deepEquals(this.absoluteOutputDir, other.absoluteOutputDir) && FrameExtractorApiPigeonUtils.deepEquals(this.maxLongEdgePx, other.maxLongEdgePx) && FrameExtractorApiPigeonUtils.deepEquals(this.maxFrames, other.maxFrames) && FrameExtractorApiPigeonUtils.deepEquals(this.jpegQuality, other.jpegQuality) && FrameExtractorApiPigeonUtils.deepEquals(this.rangeStartMs, other.rangeStartMs) && FrameExtractorApiPigeonUtils.deepEquals(this.rangeEndMs, other.rangeEndMs)
   }
 
   override fun hashCode(): Int {
@@ -298,10 +304,12 @@ data class ExtractRequest (
     result = 31 * result + FrameExtractorApiPigeonUtils.deepHash(this.maxLongEdgePx)
     result = 31 * result + FrameExtractorApiPigeonUtils.deepHash(this.maxFrames)
     result = 31 * result + FrameExtractorApiPigeonUtils.deepHash(this.jpegQuality)
+    result = 31 * result + FrameExtractorApiPigeonUtils.deepHash(this.rangeStartMs)
+    result = 31 * result + FrameExtractorApiPigeonUtils.deepHash(this.rangeEndMs)
     return result
   }
   override fun toString(): String {
-    return "ExtractRequest(absoluteVideoPath=$absoluteVideoPath, absoluteOutputDir=$absoluteOutputDir, maxLongEdgePx=$maxLongEdgePx, maxFrames=$maxFrames, jpegQuality=$jpegQuality)"
+    return "ExtractRequest(absoluteVideoPath=$absoluteVideoPath, absoluteOutputDir=$absoluteOutputDir, maxLongEdgePx=$maxLongEdgePx, maxFrames=$maxFrames, jpegQuality=$jpegQuality, rangeStartMs=$rangeStartMs, rangeEndMs=$rangeEndMs)"
   }
 }
 

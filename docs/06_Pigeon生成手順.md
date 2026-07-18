@@ -22,3 +22,8 @@ C:\Users\flyin\develop\flutter\bin\cache\dart-sdk\bin\dart.exe run pigeon --inpu
 `cancelExtraction`、`FrameExtractionProgressApi`を追加し、上記と同じコマンドで
 Dart・Kotlin・Swiftを再生成した。既存の`probe`と`generateThumbnail`の
 シグネチャは変更していない。
+
+## フェーズ3.5での拡張
+
+2026-07-18に`ExtractRequest`へ`rangeStartMs`と`rangeEndMs`を追加し、
+Dart・Kotlin・Swiftを再生成した。既存APIのシグネチャは変更していない。

@@ -255,6 +255,8 @@ struct ExtractRequest: Hashable, CustomStringConvertible {
   var maxLongEdgePx: Int64
   var maxFrames: Int64
   var jpegQuality: Int64
+  var rangeStartMs: Int64? = nil
+  var rangeEndMs: Int64? = nil
 
 
   // swift-format-ignore: AlwaysUseLowerCamelCase
@@ -264,13 +266,17 @@ struct ExtractRequest: Hashable, CustomStringConvertible {
     let maxLongEdgePx = pigeonVar_list[2] as! Int64
     let maxFrames = pigeonVar_list[3] as! Int64
     let jpegQuality = pigeonVar_list[4] as! Int64
+    let rangeStartMs: Int64? = nilOrValue(pigeonVar_list[5])
+    let rangeEndMs: Int64? = nilOrValue(pigeonVar_list[6])
 
     return ExtractRequest(
       absoluteVideoPath: absoluteVideoPath,
       absoluteOutputDir: absoluteOutputDir,
       maxLongEdgePx: maxLongEdgePx,
       maxFrames: maxFrames,
-      jpegQuality: jpegQuality
+      jpegQuality: jpegQuality,
+      rangeStartMs: rangeStartMs,
+      rangeEndMs: rangeEndMs
     )
   }
   func toList() -> [Any?] {
@@ -280,13 +286,15 @@ struct ExtractRequest: Hashable, CustomStringConvertible {
       maxLongEdgePx,
       maxFrames,
       jpegQuality,
+      rangeStartMs,
+      rangeEndMs,
     ]
   }
   static func == (lhs: ExtractRequest, rhs: ExtractRequest) -> Bool {
     if Swift.type(of: lhs) != Swift.type(of: rhs) {
       return false
     }
-    return FrameExtractorApiPigeonInternal.deepEquals(lhs.absoluteVideoPath, rhs.absoluteVideoPath) && FrameExtractorApiPigeonInternal.deepEquals(lhs.absoluteOutputDir, rhs.absoluteOutputDir) && FrameExtractorApiPigeonInternal.deepEquals(lhs.maxLongEdgePx, rhs.maxLongEdgePx) && FrameExtractorApiPigeonInternal.deepEquals(lhs.maxFrames, rhs.maxFrames) && FrameExtractorApiPigeonInternal.deepEquals(lhs.jpegQuality, rhs.jpegQuality)
+    return FrameExtractorApiPigeonInternal.deepEquals(lhs.absoluteVideoPath, rhs.absoluteVideoPath) && FrameExtractorApiPigeonInternal.deepEquals(lhs.absoluteOutputDir, rhs.absoluteOutputDir) && FrameExtractorApiPigeonInternal.deepEquals(lhs.maxLongEdgePx, rhs.maxLongEdgePx) && FrameExtractorApiPigeonInternal.deepEquals(lhs.maxFrames, rhs.maxFrames) && FrameExtractorApiPigeonInternal.deepEquals(lhs.jpegQuality, rhs.jpegQuality) && FrameExtractorApiPigeonInternal.deepEquals(lhs.rangeStartMs, rhs.rangeStartMs) && FrameExtractorApiPigeonInternal.deepEquals(lhs.rangeEndMs, rhs.rangeEndMs)
   }
 
   func hash(into hasher: inout Hasher) {
@@ -296,10 +304,12 @@ struct ExtractRequest: Hashable, CustomStringConvertible {
     FrameExtractorApiPigeonInternal.deepHash(value: maxLongEdgePx, hasher: &hasher)
     FrameExtractorApiPigeonInternal.deepHash(value: maxFrames, hasher: &hasher)
     FrameExtractorApiPigeonInternal.deepHash(value: jpegQuality, hasher: &hasher)
+    FrameExtractorApiPigeonInternal.deepHash(value: rangeStartMs, hasher: &hasher)
+    FrameExtractorApiPigeonInternal.deepHash(value: rangeEndMs, hasher: &hasher)
   }
 
   public var description: String {
-    return "ExtractRequest(absoluteVideoPath: \(String(describing: absoluteVideoPath)), absoluteOutputDir: \(String(describing: absoluteOutputDir)), maxLongEdgePx: \(String(describing: maxLongEdgePx)), maxFrames: \(String(describing: maxFrames)), jpegQuality: \(String(describing: jpegQuality)))"
+    return "ExtractRequest(absoluteVideoPath: \(String(describing: absoluteVideoPath)), absoluteOutputDir: \(String(describing: absoluteOutputDir)), maxLongEdgePx: \(String(describing: maxLongEdgePx)), maxFrames: \(String(describing: maxFrames)), jpegQuality: \(String(describing: jpegQuality)), rangeStartMs: \(String(describing: rangeStartMs)), rangeEndMs: \(String(describing: rangeEndMs)))"
   }
 }
 

@@ -57,6 +57,11 @@ void main() {
     );
     await cachedFrame.parent.create(recursive: true);
     await cachedFrame.writeAsString('frame');
+    final previewFrame = File(
+      '${temporaryDirectory.path}/frames_preview/clip-1/frame_000000.jpg',
+    );
+    await previewFrame.parent.create(recursive: true);
+    await previewFrame.writeAsString('preview');
     final clips = <Clip>[
       Clip(
         id: 'clip-1',
@@ -75,6 +80,7 @@ void main() {
     expect(await video.exists(), isFalse);
     expect(await thumbnail.exists(), isFalse);
     expect(await cachedFrame.parent.exists(), isFalse);
+    expect(await previewFrame.parent.exists(), isFalse);
   });
 
   test('壊れたJSONは.brokenへ残し空リストで復帰する', () async {

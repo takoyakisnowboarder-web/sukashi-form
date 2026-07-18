@@ -8,6 +8,8 @@ class Clip {
     required this.memo,
     this.isBroken = false,
     this.validationError,
+    this.trimStartMs,
+    this.trimEndMs,
   });
 
   final String id;
@@ -18,9 +20,16 @@ class Clip {
   final String? memo;
   final bool isBroken;
   final String? validationError;
+  final int? trimStartMs;
+  final int? trimEndMs;
+
+  bool get hasComparisonRange => trimStartMs != null && trimEndMs != null;
+
+  int? get comparisonRangeDurationMs =>
+      hasComparisonRange ? trimEndMs! - trimStartMs! : null;
 
   factory Clip.fromJson(Map<String, dynamic> json) {
-    return Clip(
+    final clip = Clip(
       id: json['id'] as String,
       videoPath: json['videoPath'] as String,
       thumbnailPath: json['thumbnailPath'] as String?,
@@ -29,7 +38,11 @@ class Clip {
       memo: json['memo'] as String?,
       isBroken: json['isBroken'] as bool? ?? false,
       validationError: json['validationError'] as String?,
+      trimStartMs: json['trimStartMs'] as int?,
+      trimEndMs: json['trimEndMs'] as int?,
     );
+    clip.validateComparisonRange();
+    return clip;
   }
 
   Map<String, dynamic> toJson() {
@@ -42,6 +55,8 @@ class Clip {
       'memo': memo,
       'isBroken': isBroken,
       'validationError': validationError,
+      'trimStartMs': trimStartMs,
+      'trimEndMs': trimEndMs,
     };
   }
 
@@ -55,6 +70,8 @@ class Clip {
       memo: value,
       isBroken: isBroken,
       validationError: validationError,
+      trimStartMs: trimStartMs,
+      trimEndMs: trimEndMs,
     );
   }
 
@@ -73,7 +90,41 @@ class Clip {
       memo: memo,
       isBroken: isBroken,
       validationError: validationError,
+      trimStartMs: trimStartMs,
+      trimEndMs: trimEndMs,
     );
+  }
+
+  Clip withComparisonRange({required int? startMs, required int? endMs}) {
+    final updated = Clip(
+      id: id,
+      videoPath: videoPath,
+      thumbnailPath: thumbnailPath,
+      recordedAt: recordedAt,
+      durationMs: durationMs,
+      memo: memo,
+      isBroken: isBroken,
+      validationError: validationError,
+      trimStartMs: startMs,
+      trimEndMs: endMs,
+    );
+    updated.validateComparisonRange();
+    return updated;
+  }
+
+  void validateComparisonRange() {
+    if (trimStartMs == null && trimEndMs == null) {
+      return;
+    }
+    if (trimStartMs == null || trimEndMs == null) {
+      throw ArgumentError('Comparison range requires both start and end.');
+    }
+    if (trimStartMs! < 0 ||
+        trimStartMs! >= trimEndMs! ||
+        trimEndMs! > durationMs ||
+        trimEndMs! - trimStartMs! > 10000) {
+      throw ArgumentError('Invalid comparison range.');
+    }
   }
 
   @override
@@ -86,7 +137,9 @@ class Clip {
         other.durationMs == durationMs &&
         other.memo == memo &&
         other.isBroken == isBroken &&
-        other.validationError == validationError;
+        other.validationError == validationError &&
+        other.trimStartMs == trimStartMs &&
+        other.trimEndMs == trimEndMs;
   }
 
   @override
@@ -99,5 +152,7 @@ class Clip {
     memo,
     isBroken,
     validationError,
+    trimStartMs,
+    trimEndMs,
   );
 }

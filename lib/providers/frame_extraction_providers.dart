@@ -20,3 +20,23 @@ final frameCacheServiceProvider = Provider<FrameCacheService>((ref) {
     ref.watch(frameExtractionClientProvider),
   );
 });
+
+final framePreviewCacheRepositoryProvider = Provider<FrameCacheRepository>((
+  ref,
+) {
+  return FrameCacheRepository(
+    ref.watch(clipRepositoryProvider),
+    rootDirectory: 'frames_preview',
+  );
+});
+
+final framePreviewServiceProvider = Provider<FrameCacheService>((ref) {
+  return FrameCacheService(
+    ref.watch(clipRepositoryProvider),
+    ref.watch(framePreviewCacheRepositoryProvider),
+    ref.watch(frameExtractionClientProvider),
+    maxLongEdgePx: 240,
+    maxFrames: 24,
+    jpegQuality: 75,
+  );
+});

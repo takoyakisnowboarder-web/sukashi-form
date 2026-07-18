@@ -194,6 +194,8 @@ class ExtractRequest {
     required this.maxLongEdgePx,
     required this.maxFrames,
     required this.jpegQuality,
+    this.rangeStartMs,
+    this.rangeEndMs,
   });
 
   String absoluteVideoPath;
@@ -206,6 +208,10 @@ class ExtractRequest {
 
   int jpegQuality;
 
+  int? rangeStartMs;
+
+  int? rangeEndMs;
+
   List<Object?> _toList() {
     return <Object?>[
       absoluteVideoPath,
@@ -213,6 +219,8 @@ class ExtractRequest {
       maxLongEdgePx,
       maxFrames,
       jpegQuality,
+      rangeStartMs,
+      rangeEndMs,
     ];
   }
 
@@ -228,6 +236,8 @@ class ExtractRequest {
       maxLongEdgePx: result[2]! as int,
       maxFrames: result[3]! as int,
       jpegQuality: result[4]! as int,
+      rangeStartMs: result[5] as int?,
+      rangeEndMs: result[6] as int?,
     );
   }
 
@@ -244,7 +254,9 @@ class ExtractRequest {
         _deepEquals(absoluteOutputDir, other.absoluteOutputDir) &&
         _deepEquals(maxLongEdgePx, other.maxLongEdgePx) &&
         _deepEquals(maxFrames, other.maxFrames) &&
-        _deepEquals(jpegQuality, other.jpegQuality);
+        _deepEquals(jpegQuality, other.jpegQuality) &&
+        _deepEquals(rangeStartMs, other.rangeStartMs) &&
+        _deepEquals(rangeEndMs, other.rangeEndMs);
   }
 
   @override
@@ -253,7 +265,7 @@ class ExtractRequest {
 
   @override
   String toString() {
-    return 'ExtractRequest(absoluteVideoPath: $absoluteVideoPath, absoluteOutputDir: $absoluteOutputDir, maxLongEdgePx: $maxLongEdgePx, maxFrames: $maxFrames, jpegQuality: $jpegQuality)';
+    return 'ExtractRequest(absoluteVideoPath: $absoluteVideoPath, absoluteOutputDir: $absoluteOutputDir, maxLongEdgePx: $maxLongEdgePx, maxFrames: $maxFrames, jpegQuality: $jpegQuality, rangeStartMs: $rangeStartMs, rangeEndMs: $rangeEndMs)';
   }
 }
 

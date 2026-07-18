@@ -10,7 +10,7 @@ import 'package:image_picker/image_picker.dart';
 import '../models/clip.dart' as model;
 import '../providers/clip_providers.dart';
 
-enum _ClipAction { extractFrames, editMemo, delete }
+enum _ClipAction { selectRange, extractFrames, editMemo, delete }
 
 typedef ThumbnailWidgetBuilder = Widget Function(String path, Key key);
 
@@ -162,6 +162,12 @@ class _ClipGrid extends ConsumerWidget {
       builder: (context) => SafeArea(
         child: Wrap(
           children: <Widget>[
+            if (!clip.isBroken)
+              ListTile(
+                leading: const Icon(Icons.content_cut),
+                title: const Text('比較範囲を選択'),
+                onTap: () => Navigator.pop(context, _ClipAction.selectRange),
+              ),
             if (kDebugMode)
               ListTile(
                 leading: const Icon(Icons.photo_library_outlined),
@@ -186,6 +192,8 @@ class _ClipGrid extends ConsumerWidget {
       return;
     }
     switch (action) {
+      case _ClipAction.selectRange:
+        await context.push('/comparison-range/${clip.id}');
       case _ClipAction.extractFrames:
         await context.push('/debug/frame-extraction/${clip.id}');
       case _ClipAction.editMemo:
@@ -221,7 +229,7 @@ class _ClipGrid extends ConsumerWidget {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('クリップを削除しますか？'),
-        content: const Text('動画とサムネイルも端末から削除されます。'),
+        content: const Text('動画、サムネイル、フレームキャッシュが端末から削除されます。'),
         actions: <Widget>[
           TextButton(
             onPressed: () => Navigator.pop(context, false),
@@ -335,6 +343,25 @@ class _ClipCard extends StatelessWidget {
                   ),
                   const SizedBox(height: 4),
                   Text(_formatDuration(clip.durationMs)),
+                  if (clip.hasComparisonRange) ...<Widget>[
+                    const SizedBox(height: 4),
+                    Row(
+                      key: ValueKey<String>('comparison-range-${clip.id}'),
+                      children: <Widget>[
+                        const Icon(Icons.content_cut, size: 15),
+                        const SizedBox(width: 4),
+                        Expanded(
+                          child: Text(
+                            '${_formatDuration(clip.comparisonRangeDurationMs!)}'
+                            ' / 全体${_formatDuration(clip.durationMs)}',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: Theme.of(context).textTheme.labelSmall,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
                   const SizedBox(height: 4),
                   Text(
                     clip.memo ?? 'メモなし',

@@ -49,6 +49,9 @@ class ClipRepository {
   }
 
   Future<void> saveClips(List<Clip> clips) async {
+    for (final clip in clips) {
+      clip.validateComparisonRange();
+    }
     final file = await _clipsFile;
     await file.parent.create(recursive: true);
     final temporaryFile = File('${file.path}.tmp');
@@ -78,7 +81,12 @@ class ClipRepository {
       await _deleteRelativeFileIfPresent(thumbnailPath);
     }
     await _deleteRelativeDirectoryIfPresent('frames/${clip.id}');
+    await _deleteRelativeDirectoryIfPresent('frames_preview/${clip.id}');
     await saveClips(clips.where((item) => item.id != id).toList());
+  }
+
+  Future<void> deleteComparisonCache(String clipId) {
+    return _deleteRelativeDirectoryIfPresent('frames/$clipId');
   }
 
   Future<String> resolveAbsolutePath(String relativePath) async {

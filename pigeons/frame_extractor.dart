@@ -37,6 +37,8 @@ class ExtractRequest {
     required this.maxLongEdgePx,
     required this.maxFrames,
     required this.jpegQuality,
+    this.rangeStartMs,
+    this.rangeEndMs,
   });
 
   String absoluteVideoPath;
@@ -44,6 +46,8 @@ class ExtractRequest {
   int maxLongEdgePx;
   int maxFrames;
   int jpegQuality;
+  int? rangeStartMs;
+  int? rangeEndMs;
 }
 
 class ExtractResult {

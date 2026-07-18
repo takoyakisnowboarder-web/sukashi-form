@@ -130,16 +130,17 @@ class FrameExtractionSession {
 }
 
 class FrameCacheRepository {
-  FrameCacheRepository(this._clipRepository);
+  FrameCacheRepository(this._clipRepository, {this.rootDirectory = 'frames'});
 
   static const manifestFileName = 'manifest.json';
-  static const manifestVersion = 1;
+  static const manifestVersion = 2;
 
   final ClipRepository _clipRepository;
+  final String rootDirectory;
 
   Future<Directory> directoryFor(String clipId) async {
     return Directory(
-      await _clipRepository.resolveAbsolutePath('frames/$clipId'),
+      await _clipRepository.resolveAbsolutePath('$rootDirectory/$clipId'),
     );
   }
 
@@ -148,6 +149,8 @@ class FrameCacheRepository {
     required int maxLongEdgePx,
     required int maxFrames,
     required int jpegQuality,
+    required int? rangeStartMs,
+    required int? rangeEndMs,
   }) async {
     final directory = await directoryFor(clipId);
     final manifestFile = File(
@@ -163,7 +166,9 @@ class FrameCacheRepository {
       if (json['version'] != manifestVersion ||
           json['maxLongEdgePx'] != maxLongEdgePx ||
           json['maxFrames'] != maxFrames ||
-          json['jpegQuality'] != jpegQuality) {
+          json['jpegQuality'] != jpegQuality ||
+          json['rangeStartMs'] != rangeStartMs ||
+          json['rangeEndMs'] != rangeEndMs) {
         return null;
       }
       final frameCount = json['frameCount'] as int;
@@ -196,6 +201,8 @@ class FrameCacheRepository {
     required int maxLongEdgePx,
     required int maxFrames,
     required int jpegQuality,
+    required int? rangeStartMs,
+    required int? rangeEndMs,
   }) async {
     final directory = await directoryFor(clipId);
     final frameCount = nativeResult.frameCount;
@@ -215,7 +222,7 @@ class FrameCacheRepository {
     final temporary = File('${manifestFile.path}.tmp');
     try {
       await temporary.writeAsString(
-        jsonEncode(<String, Object>{
+        jsonEncode(<String, Object?>{
           'version': manifestVersion,
           'frameCount': frameCount,
           'isComplete': nativeResult.isComplete,
@@ -224,6 +231,8 @@ class FrameCacheRepository {
           'maxLongEdgePx': maxLongEdgePx,
           'maxFrames': maxFrames,
           'jpegQuality': jpegQuality,
+          'rangeStartMs': rangeStartMs,
+          'rangeEndMs': rangeEndMs,
         }),
         flush: true,
       );
@@ -257,7 +266,7 @@ class FrameCacheRepository {
 
   Future<void> deleteAllCaches() async {
     final directory = Directory(
-      await _clipRepository.resolveAbsolutePath('frames'),
+      await _clipRepository.resolveAbsolutePath(rootDirectory),
     );
     if (await directory.exists()) {
       await directory.delete(recursive: true);
@@ -295,6 +304,18 @@ class FrameCacheService {
   final int jpegQuality;
 
   FrameExtractionSession startExtraction(Clip clip) {
+    return startExtractionForRange(
+      clip,
+      rangeStartMs: clip.trimStartMs,
+      rangeEndMs: clip.trimEndMs,
+    );
+  }
+
+  FrameExtractionSession startExtractionForRange(
+    Clip clip, {
+    required int? rangeStartMs,
+    required int? rangeEndMs,
+  }) {
     final taskId = _uuid.v4();
     final progressController =
         StreamController<FrameExtractionProgress>.broadcast(sync: true);
@@ -312,6 +333,8 @@ class FrameCacheService {
           maxLongEdgePx: maxLongEdgePx,
           maxFrames: maxFrames,
           jpegQuality: jpegQuality,
+          rangeStartMs: rangeStartMs,
+          rangeEndMs: rangeEndMs,
         );
         if (cached != null) {
           return cached;
@@ -341,6 +364,8 @@ class FrameCacheService {
             maxLongEdgePx: maxLongEdgePx,
             maxFrames: maxFrames,
             jpegQuality: jpegQuality,
+            rangeStartMs: rangeStartMs,
+            rangeEndMs: rangeEndMs,
           ),
         );
         if (state.cancelled || nativeResult.errorReason == 'cancelled') {
@@ -356,6 +381,8 @@ class FrameCacheService {
           maxLongEdgePx: maxLongEdgePx,
           maxFrames: maxFrames,
           jpegQuality: jpegQuality,
+          rangeStartMs: rangeStartMs,
+          rangeEndMs: rangeEndMs,
         );
       } on Object {
         if (startedNativeExtraction) {

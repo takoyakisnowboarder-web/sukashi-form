@@ -65,6 +65,26 @@ void main() {
 
     expect(find.text('比較するクリップを2本選択 (0/2)'), findsOneWidget);
     expect(find.text('この動画は比較に使用できません。'), findsOneWidget);
+    await tester.longPress(find.text('この動画は読み込めません'));
+    await tester.pumpAndSettle();
+    expect(find.text('比較範囲を選択'), findsNothing);
+  });
+
+  testWidgets('範囲設定済みクリップに選択範囲を表示する', (tester) async {
+    await _pumpLibrary(tester, repository, <Clip>[
+      _clip(
+        id: 'ranged',
+        durationMs: 30000,
+        trimStartMs: 12000,
+        trimEndMs: 17000,
+      ),
+    ]);
+
+    expect(
+      find.byKey(const ValueKey<String>('comparison-range-ranged')),
+      findsOneWidget,
+    );
+    expect(find.text('5.0秒 / 全体30.0秒'), findsOneWidget);
   });
 }
 
@@ -104,15 +124,20 @@ Clip _clip({
   String id = 'unknown-duration',
   String? thumbnailPath,
   bool isBroken = false,
+  int durationMs = 0,
+  int? trimStartMs,
+  int? trimEndMs,
 }) {
   return Clip(
     id: id,
     videoPath: 'videos/$id.mp4',
     thumbnailPath: thumbnailPath,
     recordedAt: DateTime(2026, 7, 17, 12),
-    durationMs: 0,
+    durationMs: durationMs,
     memo: null,
     isBroken: isBroken,
     validationError: isBroken ? 'empty_file' : null,
+    trimStartMs: trimStartMs,
+    trimEndMs: trimEndMs,
   );
 }

@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 
 import '../screens/capture_screen.dart';
 import '../screens/compare_stub_screen.dart';
+import '../screens/comparison_range_screen.dart';
 import '../screens/frame_extraction_debug_screen.dart';
 import '../screens/library_screen.dart';
 
@@ -12,6 +13,11 @@ final appRouter = GoRouter(
     GoRoute(
       path: '/capture',
       builder: (context, state) => const CaptureScreen(),
+    ),
+    GoRoute(
+      path: '/comparison-range/:clipId',
+      builder: (context, state) =>
+          ComparisonRangeScreen(clipId: state.pathParameters['clipId']!),
     ),
     GoRoute(
       path: '/compare',
