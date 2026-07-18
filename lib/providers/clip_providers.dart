@@ -5,12 +5,19 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
 
 import '../data/clip_repository.dart';
+import '../data/comparison_pair_repository.dart';
 import '../data/video_library_service.dart';
 import '../data/video_metadata_service.dart';
 import '../models/clip.dart';
 
 final clipRepositoryProvider = Provider<ClipRepository>((ref) {
   return ClipRepository();
+});
+
+final comparisonPairRepositoryProvider = Provider<ComparisonPairRepository>((
+  ref,
+) {
+  return ComparisonPairRepository(ref.watch(clipRepositoryProvider));
 });
 
 final videoLibraryServiceProvider = Provider<VideoLibraryService>((ref) {
@@ -46,6 +53,9 @@ class ClipListNotifier extends AsyncNotifier<List<Clip>> {
     final clips = state.value ?? <Clip>[];
     state = const AsyncLoading<List<Clip>>();
     state = await AsyncValue.guard(() async {
+      await ref
+          .read(comparisonPairRepositoryProvider)
+          .deletePairsContaining(id);
       await _repository.deleteClip(id, clips);
       return clips.where((clip) => clip.id != id).toList(growable: false);
     });

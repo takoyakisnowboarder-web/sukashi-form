@@ -114,7 +114,7 @@ class _ProgressHandler extends FrameExtractionProgressApi {
 }
 
 class FrameExtractionSession {
-  FrameExtractionSession._({
+  FrameExtractionSession({
     required this.taskId,
     required this.progress,
     required this.result,
@@ -396,7 +396,7 @@ class FrameCacheService {
       }
     });
 
-    return FrameExtractionSession._(
+    return FrameExtractionSession(
       taskId: taskId,
       progress: progressController.stream,
       result: result,
