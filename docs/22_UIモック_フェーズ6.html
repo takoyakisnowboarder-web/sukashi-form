@@ -1,0 +1,318 @@
+<title>スカシフォーム UIモック</title>
+<style>
+  :root{
+    --page-bg:#eceef3; --page-ink:#23252c; --page-sub:#5a5e6b; --card:#ffffff; --line:#d6d9e2;
+    /* アプリ内配色(実アプリの現行テーマを踏襲) */
+    --app-bg:#f2f3fa; --app-ink:#1b1c22; --app-sub:#6a6d7a;
+    --indigo:#4c5c92; --indigo-ink:#ffffff; --pill:#dfe3f7; --pill-ink:#3a4570;
+    --rec:#e5493d; --cam:#0b0b0e; --gridline:rgba(255,255,255,.5);
+    --coral:#ff6e5a; --cyan:#35c6e8;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{ --page-bg:#17181d; --page-ink:#e8e9ee; --page-sub:#9a9eab; --card:#20222a; --line:#34363f; }
+  }
+  :root[data-theme="dark"]{ --page-bg:#17181d; --page-ink:#e8e9ee; --page-sub:#9a9eab; --card:#20222a; --line:#34363f; }
+  :root[data-theme="light"]{ --page-bg:#eceef3; --page-ink:#23252c; --page-sub:#5a5e6b; --card:#ffffff; --line:#d6d9e2; }
+
+  body{ background:var(--page-bg); color:var(--page-ink);
+    font-family:"Hiragino Kaku Gothic ProN","Yu Gothic UI","Yu Gothic",Meiryo,sans-serif;
+    margin:0; padding:32px 20px 56px; }
+  header{ max-width:1240px; margin:0 auto 28px; }
+  h1{ font-size:22px; margin:0 0 6px; letter-spacing:.02em; }
+  header p{ margin:0; color:var(--page-sub); font-size:13.5px; line-height:1.7; }
+
+  .frames{ display:flex; flex-wrap:wrap; gap:28px; justify-content:center; max-width:1240px; margin:0 auto; }
+  figure{ margin:0; width:342px; }
+  figcaption{ margin-top:12px; font-size:13px; line-height:1.75; color:var(--page-sub); }
+  figcaption b{ color:var(--page-ink); font-size:13.5px; display:block; margin-bottom:2px; }
+  figcaption ul{ margin:4px 0 0; padding-left:18px; }
+  figcaption li{ margin:1px 0; }
+
+  /* ---- 端末フレーム ---- */
+  .phone{ width:342px; height:722px; background:var(--app-bg); border-radius:26px;
+    border:1px solid var(--line); box-shadow:0 10px 28px rgba(20,22,40,.18);
+    overflow:hidden; display:flex; flex-direction:column; position:relative;
+    font-variant-numeric:tabular-nums; }
+  .status{ height:26px; display:flex; align-items:center; justify-content:space-between;
+    padding:0 18px; font-size:11px; color:var(--app-ink); flex:none; }
+  .navbar{ height:22px; flex:none; display:flex; align-items:center; justify-content:center; }
+  .navbar i{ width:110px; height:4px; border-radius:2px; background:rgba(0,0,0,.32); }
+  .cam .status,.cam .navbar i{ color:#fff; background:none; }
+  .cam .navbar i{ background:rgba(255,255,255,.45); }
+
+  /* 共通部品 */
+  .appbar{ display:flex; align-items:center; gap:10px; padding:8px 14px; color:var(--app-ink); flex:none; }
+  .appbar .ttl{ font-size:17px; font-weight:600; }
+  .icbtn{ width:38px; height:38px; border-radius:50%; background:var(--pill); color:var(--pill-ink);
+    display:flex; align-items:center; justify-content:center; font-size:17px; font-weight:700; flex:none; }
+  .spacer{ flex:1; }
+  .seg{ display:flex; border:1.5px solid var(--indigo); border-radius:20px; overflow:hidden; font-size:13px; }
+  .seg span{ padding:7px 16px; color:var(--pill-ink); }
+  .seg .on{ background:var(--pill); font-weight:700; }
+  .pillbtn{ background:var(--pill); color:var(--pill-ink); border-radius:20px; padding:9px 16px;
+    font-size:13.5px; font-weight:600; display:inline-flex; gap:6px; align-items:center; }
+  .primary{ background:var(--indigo); color:var(--indigo-ink); border-radius:24px; text-align:center;
+    padding:13px 0; font-size:15px; font-weight:700; }
+  .ghost{ color:var(--indigo); text-align:center; padding:11px 0; font-size:14px; font-weight:600; }
+
+  svg{ display:block; }
+
+  /* ---- 1. 撮影 ---- */
+  .cam{ background:var(--cam); }
+  .camview{ flex:1; position:relative; }
+  .gridlines{ position:absolute; inset:0;
+    background:
+      linear-gradient(to right, transparent calc(33.3% - .5px), var(--gridline) 33.3%, transparent calc(33.3% + .5px)),
+      linear-gradient(to right, transparent calc(66.6% - .5px), var(--gridline) 66.6%, transparent calc(66.6% + .5px)),
+      linear-gradient(to bottom, transparent calc(33.3% - .5px), var(--gridline) 33.3%, transparent calc(33.3% + .5px)),
+      linear-gradient(to bottom, transparent calc(66.6% - .5px), var(--gridline) 66.6%, transparent calc(66.6% + .5px)); }
+  .cam .close{ position:absolute; top:12px; left:12px; width:40px; height:40px; border-radius:50%;
+    background:#e8eaf6; color:#333; display:flex; align-items:center; justify-content:center; font-size:18px; }
+  .cam .gridchip{ position:absolute; top:14px; right:12px; background:rgba(20,20,26,.66);
+    color:#fff; border:1px solid rgba(255,255,255,.4); border-radius:18px; padding:7px 13px;
+    font-size:12.5px; display:flex; gap:6px; align-items:center; }
+  .cambar{ flex:none; background:rgba(10,10,14,.86); display:flex; align-items:center;
+    padding:14px 22px 10px; color:#fff; }
+  .cambar .side{ width:86px; text-align:center; font-size:12.5px; line-height:1.5; color:#eee; }
+  .recbtn{ width:76px; height:76px; border-radius:50%; background:var(--rec); margin:0 auto;
+    display:flex; align-items:center; justify-content:center; }
+  .recbtn i{ width:30px; height:30px; border-radius:50%; background:#fff; }
+
+  /* ---- 動画プレビュー(人型シルエット) ---- */
+  .video{ background:linear-gradient(165deg,#23252e,#101116 70%); border-radius:14px;
+    position:relative; overflow:hidden; }
+  .fig-a,.fig-b{ position:absolute; inset:0; display:flex; align-items:center; justify-content:center; }
+
+  /* ---- 2. 比較範囲 ---- */
+  .strip{ height:54px; border-radius:10px; position:relative; margin:12px 14px 0;
+    background:repeating-linear-gradient(to right,#3a3d49 0 22px,#2a2c35 22px 44px); }
+  .range{ position:absolute; top:-4px; bottom:-4px; left:34%; width:34%;
+    border:3px solid var(--indigo); border-radius:8px; background:rgba(76,92,146,.18); }
+  .range i{ position:absolute; top:50%; width:12px; height:30px; margin-top:-15px;
+    background:var(--indigo); border-radius:6px; }
+  .range .l{ left:-8px; } .range .r{ right:-8px; }
+  .selinfo{ text-align:center; font-size:14.5px; color:var(--app-ink); margin-top:10px; }
+
+  /* ---- 3-5. 比較 ---- */
+  .cmp-top{ display:flex; align-items:center; padding:6px 12px 2px; gap:8px; flex:none; }
+  .seek{ display:flex; align-items:center; gap:10px; padding:10px 18px 2px; flex:none; }
+  .track{ flex:1; height:5px; border-radius:3px; background:#c9cede; position:relative; }
+  .track i{ position:absolute; left:0; top:0; bottom:0; width:28%; background:var(--indigo); border-radius:3px; }
+  .track b{ position:absolute; left:28%; top:50%; width:20px; height:20px; margin:-10px 0 0 -10px;
+    border-radius:50%; background:var(--indigo); }
+  .seek span{ font-size:12.5px; color:var(--app-sub); white-space:nowrap; }
+  .transport{ display:flex; align-items:center; justify-content:space-evenly; padding:10px 10px 6px; flex:none; }
+  .tbtn{ width:66px; height:66px; border-radius:50%; background:var(--pill); color:var(--pill-ink);
+    display:flex; align-items:center; justify-content:center; }
+  .tbtn.play{ width:80px; height:80px; background:var(--indigo); color:#fff; }
+
+  .dim{ position:absolute; inset:0; background:rgba(15,16,22,.42); }
+  .sheet{ position:absolute; left:0; right:0; bottom:0; background:var(--card); color:var(--app-ink);
+    border-radius:22px 22px 0 0; padding:8px 20px 26px; box-shadow:0 -8px 28px rgba(10,12,24,.25); }
+  .sheet .handle{ width:44px; height:5px; border-radius:3px; background:#c3c7d4; margin:4px auto 14px; }
+  .srow{ display:flex; align-items:center; gap:12px; padding:9px 0; font-size:14px; }
+  .srow .lab{ width:86px; color:var(--app-sub); font-size:13px; flex:none; }
+  .mini{ padding:6px 13px; font-size:12.5px; }
+  .sheet .seg{ font-size:12px; }
+  .sheet .seg span{ padding:6px 11px; }
+
+  .hintchip{ position:absolute; top:10px; left:50%; transform:translateX(-50%);
+    background:rgba(20,22,30,.8); color:#fff; font-size:12px; padding:7px 14px;
+    border-radius:16px; white-space:nowrap; }
+  .alignbar{ display:flex; gap:12px; padding:10px 16px 6px; flex:none; }
+  .alignbar>div{ flex:1; }
+</style>
+
+<header>
+  <h1>スカシフォーム UI改修モック v1</h1>
+  <p>確認済みの仕様を5画面に起こしたものです。端末はPixel 8想定(縦持ち)。アプリ内の配色・部品は現行のまま、配置だけを変更しています。このモックでOKなら、このままCodex向け指示書に落とします。</p>
+</header>
+
+<div class="frames">
+
+<!-- 1. 撮影 -->
+<figure>
+  <div class="phone cam">
+    <div class="status"><span>11:20</span><span>▮▮▮</span></div>
+    <div class="camview">
+      <div class="gridlines"></div>
+      <div class="close">✕</div>
+      <div class="gridchip">⊞ 格子3×3</div>
+    </div>
+    <div class="cambar">
+      <div class="side">⏱<br>タイマー5秒</div>
+      <div style="flex:1"><div class="recbtn"><i></i></div></div>
+      <div class="side">◐<br>録画10秒</div>
+    </div>
+    <div class="navbar" style="background:rgba(10,10,14,.86)"><i></i></div>
+  </div>
+  <figcaption><b>1. 撮影画面</b>
+    <ul>
+      <li>録画ボタンを<b style="display:inline">下段の真ん中</b>に</li>
+      <li>グリッド選択を<b style="display:inline">右上</b>へ移動(タップで種類が巡回)</li>
+      <li>下段は タイマー | 録画 | 録画秒数 の3点のみ</li>
+    </ul>
+  </figcaption>
+</figure>
+
+<!-- 2. 比較範囲 -->
+<figure>
+  <div class="phone">
+    <div class="status"><span>11:20</span><span>▮▮▮</span></div>
+    <div class="appbar">←<span class="ttl">比較範囲を選択</span><span class="spacer"></span><span class="icbtn">?</span></div>
+    <div class="video" style="flex:1; margin:2px 14px 0;">
+      <div class="fig-a">
+        <svg width="150" height="240" viewBox="0 0 100 160" stroke="#e8e9f2" stroke-width="9" fill="none" stroke-linecap="round">
+          <circle cx="50" cy="26" r="12" fill="#e8e9f2" stroke="none"/>
+          <path d="M50 40 L50 95 M50 56 L20 76 M50 56 L83 48 M50 95 L30 140 M50 95 L72 138"/>
+        </svg>
+      </div>
+    </div>
+    <div class="strip"><div class="range"><i class="l"></i><i class="r"></i></div></div>
+    <div class="selinfo">選択中: <b>4.3秒</b> / 全体29.9秒</div>
+    <div style="padding:10px 18px 8px; display:flex; flex-direction:column; gap:2px;">
+      <div class="primary">保存</div>
+      <div class="ghost">リセット</div>
+    </div>
+    <div class="navbar"><i></i></div>
+  </div>
+  <figcaption><b>2. 比較範囲の選択</b>
+    <ul>
+      <li>動画プレビューを<b style="display:inline">画面の大半</b>に拡大</li>
+      <li>説明文は右上の「?」に格納(押すと表示)</li>
+      <li>フィルム帯+範囲ハンドルの操作は現行どおり</li>
+    </ul>
+  </figcaption>
+</figure>
+
+<!-- 3. 比較(通常) -->
+<figure>
+  <div class="phone">
+    <div class="status"><span>11:21</span><span>▮▮▮</span></div>
+    <div class="cmp-top">
+      <span class="icbtn" style="width:34px;height:34px;font-size:15px;">←</span>
+      <span class="spacer"></span>
+      <div class="seg"><span class="on">✓ 透過</span><span>分割</span></div>
+      <span class="spacer"></span>
+      <span class="icbtn" style="font-size:14px;">?</span>
+      <span class="icbtn">
+        <svg width="18" height="18" viewBox="0 0 18 18" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <path d="M1 4h16 M1 9h16 M1 14h16"/><circle cx="12" cy="4" r="2.6" fill="var(--pill)"/><circle cx="5" cy="9" r="2.6" fill="var(--pill)"/><circle cx="13" cy="14" r="2.6" fill="var(--pill)"/>
+        </svg>
+      </span>
+    </div>
+    <div class="video" style="flex:1; margin:6px 12px 0;">
+      <div class="fig-a">
+        <svg width="170" height="270" viewBox="0 0 100 160" stroke="var(--cyan)" stroke-width="9" fill="none" stroke-linecap="round">
+          <circle cx="50" cy="26" r="12" fill="var(--cyan)" stroke="none"/>
+          <path d="M50 40 L50 95 M50 56 L20 76 M50 56 L83 48 M50 95 L30 140 M50 95 L72 138"/>
+        </svg>
+      </div>
+      <div class="fig-b" style="opacity:.55; transform:translate(14px,4px) rotate(4deg);">
+        <svg width="170" height="270" viewBox="0 0 100 160" stroke="var(--coral)" stroke-width="9" fill="none" stroke-linecap="round">
+          <circle cx="50" cy="26" r="12" fill="var(--coral)" stroke="none"/>
+          <path d="M50 40 L50 95 M50 58 L23 70 M50 58 L84 56 M50 95 L33 141 M50 95 L74 136"/>
+        </svg>
+      </div>
+    </div>
+    <div class="seek"><div class="track"><i></i><b></b></div><span>1.2 / 4.8秒</span></div>
+    <div class="transport">
+      <div class="tbtn"><svg width="26" height="26" viewBox="0 0 24 24" fill="currentColor"><path d="M6 5h3v14H6z"/><path d="M20 5v14L9.5 12z"/></svg></div>
+      <div class="tbtn play"><svg width="34" height="34" viewBox="0 0 24 24" fill="currentColor"><path d="M7 4v16l13-8z"/></svg></div>
+      <div class="tbtn"><svg width="26" height="26" viewBox="0 0 24 24" fill="currentColor"><path d="M15 5h3v14h-3z"/><path d="M4 5v14l10.5-7z"/></svg></div>
+    </div>
+    <div class="navbar"><i></i></div>
+  </div>
+  <figcaption><b>3. 比較画面(通常時)</b>
+    <ul>
+      <li>常時表示は<b style="display:inline">映像・リモコン・シークバー・透過/分割切替</b>のみ</li>
+      <li>リモコン3つを横一列いっぱいに大型化(再生は一回り大きく)</li>
+      <li>シークバーに 現在/全体 の秒数を表示</li>
+      <li>説明は「?」、その他の設定は右上のボタン(次の画面)へ格納</li>
+    </ul>
+  </figcaption>
+</figure>
+
+<!-- 4. 比較(シート展開) -->
+<figure>
+  <div class="phone">
+    <div class="status"><span>11:21</span><span>▮▮▮</span></div>
+    <div class="cmp-top">
+      <span class="icbtn" style="width:34px;height:34px;font-size:15px;">←</span>
+      <span class="spacer"></span>
+      <div class="seg"><span class="on">✓ 透過</span><span>分割</span></div>
+      <span class="spacer"></span>
+      <span class="icbtn" style="font-size:14px;">?</span>
+      <span class="icbtn" style="background:var(--indigo); color:#fff;">
+        <svg width="18" height="18" viewBox="0 0 18 18" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <path d="M1 4h16 M1 9h16 M1 14h16"/><circle cx="12" cy="4" r="2.6" fill="var(--indigo)"/><circle cx="5" cy="9" r="2.6" fill="var(--indigo)"/><circle cx="13" cy="14" r="2.6" fill="var(--indigo)"/>
+        </svg>
+      </span>
+    </div>
+    <div class="video" style="flex:1; margin:6px 12px 0;"></div>
+    <div class="navbar"><i></i></div>
+    <div class="dim"></div>
+    <div class="sheet">
+      <div class="handle"></div>
+      <div class="srow"><span class="lab">再生</span><span class="pillbtn mini">✓ ループ</span></div>
+      <div class="srow"><span class="lab">速度</span>
+        <span class="seg"><span>0.25x</span><span>0.5x</span><span class="on">✓ 1.0x</span></span></div>
+      <div class="srow"><span class="lab">B 透過</span>
+        <div class="track" style="flex:1"><i style="width:50%"></i><b style="left:50%"></b></div><span style="font-size:13px;">50%</span></div>
+      <div class="srow"><span class="lab">位置合わせ</span><span class="pillbtn mini">✥ 位置合わせを開始</span></div>
+      <div class="srow"><span class="lab">同期</span><span style="font-size:13.5px;">✓ 同期済み</span>
+        <span class="ghost" style="padding:0; margin-left:auto;">基準を取り直す</span></div>
+    </div>
+  </div>
+  <figcaption><b>4. 比較画面(設定シート展開時)</b>
+    <ul>
+      <li>右上の設定ボタンで<b style="display:inline">下からシート</b>が出る</li>
+      <li>ループ・速度・透過スライダー・位置合わせ・基準同期をここに集約</li>
+      <li>シート外タップで閉じて映像全面に戻る</li>
+    </ul>
+  </figcaption>
+</figure>
+
+<!-- 5. 位置合わせ -->
+<figure>
+  <div class="phone">
+    <div class="status"><span>11:22</span><span>▮▮▮</span></div>
+    <div class="cmp-top"><span class="spacer"></span><div class="seg"><span>透過</span><span class="on">✓ 分割</span></div><span class="spacer"></span></div>
+    <div style="flex:1; display:flex; flex-direction:column; gap:6px; margin:6px 12px 0; position:relative;">
+      <div class="hintchip">触った映像がそのまま動きます(ドラッグ/ピンチ/2本指回転)</div>
+      <div class="video" style="flex:1;">
+        <span style="position:absolute;top:8px;left:10px;color:#fff;font-size:13px;">A</span>
+        <div class="fig-a">
+          <svg width="110" height="170" viewBox="0 0 100 160" stroke="var(--cyan)" stroke-width="9" fill="none" stroke-linecap="round">
+            <circle cx="50" cy="26" r="12" fill="var(--cyan)" stroke="none"/>
+            <path d="M50 40 L50 95 M50 56 L20 76 M50 56 L83 48 M50 95 L30 140 M50 95 L72 138"/>
+          </svg>
+        </div>
+      </div>
+      <div class="video" style="flex:1; outline:3px dashed var(--indigo); outline-offset:-3px;">
+        <span style="position:absolute;top:8px;left:10px;color:#fff;font-size:13px;">B</span>
+        <div class="fig-b">
+          <svg width="110" height="170" viewBox="0 0 100 160" stroke="var(--coral)" stroke-width="9" fill="none" stroke-linecap="round">
+            <circle cx="50" cy="26" r="12" fill="var(--coral)" stroke="none"/>
+            <path d="M50 40 L50 95 M50 58 L23 70 M50 58 L84 56 M50 95 L33 141 M50 95 L74 136"/>
+          </svg>
+        </div>
+        <span style="position:absolute; right:10px; bottom:8px; color:#fff; font-size:15px;">✥</span>
+      </div>
+    </div>
+    <div class="alignbar">
+      <div class="ghost" style="border:1.5px solid var(--indigo); border-radius:24px;">リセット</div>
+      <div class="primary">完了</div>
+    </div>
+    <div class="navbar"><i></i></div>
+  </div>
+  <figcaption><b>5. 位置合わせモード中</b>
+    <ul>
+      <li>A/B選択ボタンを<b style="display:inline">廃止</b>。分割=触った側が動く/透過=上のB(枠で明示)</li>
+      <li>操作ヒントは上部チップに集約、下は リセット | 完了 のみ</li>
+      <li>モードのON/OFF自体は残し、通常時の誤操作を防止</li>
+    </ul>
+  </figcaption>
+</figure>
+
+</div>
