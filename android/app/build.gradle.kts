@@ -1,7 +1,24 @@
+import java.io.FileInputStream
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")
+}
+
+val releasePropertiesFile = rootProject.file("key.properties")
+val releaseProperties = Properties()
+val hasReleaseSigning = releasePropertiesFile.exists()
+if (hasReleaseSigning) {
+    FileInputStream(releasePropertiesFile).use(releaseProperties::load)
+    val requiredKeys = listOf("storeFile", "storePassword", "keyAlias", "keyPassword")
+    val missingKeys = requiredKeys.filter { releaseProperties.getProperty(it).isNullOrBlank() }
+    if (missingKeys.isNotEmpty()) {
+        throw GradleException(
+            "android/key.properties に必要な項目がありません: ${missingKeys.joinToString()}",
+        )
+    }
 }
 
 android {
@@ -12,6 +29,17 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
+    }
+
+    signingConfigs {
+        if (hasReleaseSigning) {
+            create("release") {
+                keyAlias = releaseProperties.getProperty("keyAlias")
+                keyPassword = releaseProperties.getProperty("keyPassword")
+                storeFile = rootProject.file(releaseProperties.getProperty("storeFile"))
+                storePassword = releaseProperties.getProperty("storePassword")
+            }
+        }
     }
 
     defaultConfig {
@@ -27,9 +55,22 @@ android {
 
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
+            if (hasReleaseSigning) {
+                signingConfig = signingConfigs.getByName("release")
+            }
+        }
+    }
+}
+
+tasks.configureEach {
+    if (name == "packageRelease" || name == "bundleRelease" || name == "packageReleaseBundle") {
+        doFirst {
+            if (!hasReleaseSigning) {
+                throw GradleException(
+                    "release署名情報がありません。docs/17_リリース署名手順.md に従って " +
+                        "android/key.properties を用意してください。署名鍵をGitへ追加しないでください。",
+                )
+            }
         }
     }
 }
