@@ -1,9 +1,14 @@
 package com.sukashiform.app
 
+import android.content.ContentValues
+import android.content.Context
 import android.graphics.Bitmap
 import android.media.MediaMetadataRetriever
+import android.os.Build
 import android.os.Handler
 import android.os.Looper
+import android.os.Environment
+import android.provider.MediaStore
 import java.io.File
 import java.io.FileOutputStream
 import java.util.Locale
@@ -13,7 +18,9 @@ import kotlin.math.ceil
 import kotlin.math.roundToInt
 
 class FrameExtractorApiImpl(
+    private val context: Context,
     private val progressApi: FrameExtractionProgressApi,
+    private val onVolumeKeyCaptureChanged: (Boolean) -> Unit,
 ) : FrameExtractorApi {
     private val mainHandler = Handler(Looper.getMainLooper())
     private val cancellationFlags = ConcurrentHashMap<String, AtomicBoolean>()
@@ -70,6 +77,55 @@ class FrameExtractorApiImpl(
 
     override fun cancelExtraction(taskId: String) {
         cancellationFlags.computeIfAbsent(taskId) { AtomicBoolean(false) }.set(true)
+    }
+
+    override fun isGallerySaveSupported(): Boolean = Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q
+
+    override fun saveVideoToGallery(
+        absoluteVideoPath: String,
+        callback: (Result<Unit>) -> Unit,
+    ) {
+        callback(runCatching { copyVideoToMediaStore(absoluteVideoPath) })
+    }
+
+    override fun setVolumeKeyCaptureEnabled(enabled: Boolean) {
+        mainHandler.post { onVolumeKeyCaptureChanged(enabled) }
+    }
+
+    private fun copyVideoToMediaStore(path: String) {
+        check(Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            "Gallery saving requires Android 10 or newer."
+        }
+        val source = File(path)
+        require(source.isFile && source.length() > 0L) { "Recorded video is unavailable." }
+        val values = ContentValues().apply {
+            put(MediaStore.Video.Media.DISPLAY_NAME, "SukashiForm_${System.currentTimeMillis()}.mp4")
+            put(MediaStore.Video.Media.MIME_TYPE, "video/mp4")
+            put(
+                MediaStore.Video.Media.RELATIVE_PATH,
+                "${Environment.DIRECTORY_MOVIES}/スカシフォーム",
+            )
+            put(MediaStore.Video.Media.IS_PENDING, 1)
+        }
+        val resolver = context.contentResolver
+        val uri = requireNotNull(
+            resolver.insert(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, values),
+        ) { "MediaStore insert failed." }
+        try {
+            resolver.openOutputStream(uri, "w").use { output ->
+                requireNotNull(output) { "MediaStore output stream is unavailable." }
+                source.inputStream().use { input -> input.copyTo(output) }
+            }
+            val completed = ContentValues().apply {
+                put(MediaStore.Video.Media.IS_PENDING, 0)
+            }
+            check(resolver.update(uri, completed, null, null) == 1) {
+                "MediaStore item could not be finalized."
+            }
+        } catch (error: Throwable) {
+            resolver.delete(uri, null, null)
+            throw error
+        }
     }
 
     private fun probeVideo(path: String): VideoInfo {

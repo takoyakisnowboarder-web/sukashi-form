@@ -26,12 +26,14 @@ class AppSettings {
     required this.gridType,
     required this.countdownSeconds,
     required this.recordingSeconds,
+    required this.saveToGallery,
   });
 
   static const defaults = AppSettings(
     gridType: CameraGridType.none,
     countdownSeconds: 0,
     recordingSeconds: 10,
+    saveToGallery: true,
   );
 
   static const countdownOptions = <int>[0, 3, 5, 10];
@@ -40,6 +42,7 @@ class AppSettings {
   final CameraGridType gridType;
   final int countdownSeconds;
   final int recordingSeconds;
+  final bool saveToGallery;
 
   factory AppSettings.fromJson(Map<String, dynamic> json) {
     final countdown = json['countdownSeconds'];
@@ -52,6 +55,9 @@ class AppSettings {
       recordingSeconds: recording is int && recordingOptions.contains(recording)
           ? recording
           : 10,
+      saveToGallery: json['saveToGallery'] is bool
+          ? json['saveToGallery'] as bool
+          : true,
     );
   }
 
@@ -59,17 +65,20 @@ class AppSettings {
     'gridType': gridType.name,
     'countdownSeconds': countdownSeconds,
     'recordingSeconds': recordingSeconds,
+    'saveToGallery': saveToGallery,
   };
 
   AppSettings copyWith({
     CameraGridType? gridType,
     int? countdownSeconds,
     int? recordingSeconds,
+    bool? saveToGallery,
   }) {
     return AppSettings(
       gridType: gridType ?? this.gridType,
       countdownSeconds: countdownSeconds ?? this.countdownSeconds,
       recordingSeconds: recordingSeconds ?? this.recordingSeconds,
+      saveToGallery: saveToGallery ?? this.saveToGallery,
     );
   }
 
@@ -88,11 +97,13 @@ class AppSettings {
     return other is AppSettings &&
         other.gridType == gridType &&
         other.countdownSeconds == countdownSeconds &&
-        other.recordingSeconds == recordingSeconds;
+        other.recordingSeconds == recordingSeconds &&
+        other.saveToGallery == saveToGallery;
   }
 
   @override
-  int get hashCode => Object.hash(gridType, countdownSeconds, recordingSeconds);
+  int get hashCode =>
+      Object.hash(gridType, countdownSeconds, recordingSeconds, saveToGallery);
 }
 
 extension<T> on Iterable<T> {

@@ -257,7 +257,7 @@ class _CompareScreenState extends ConsumerState<CompareScreen>
       WidgetsBinding.instance.addPostFrameCallback((_) => _prepare(clips));
     }
     return Scaffold(
-      appBar: AppBar(title: const Text('比較')),
+      appBar: _controller == null ? AppBar(title: const Text('比較')) : null,
       body: _body(clipsValue),
     );
   }
@@ -314,75 +314,216 @@ class _CompareScreenState extends ConsumerState<CompareScreen>
       controller,
     );
     return SafeArea(
-      top: false,
-      bottom: false,
       child: Padding(
-        padding: EdgeInsets.fromLTRB(
-          12,
-          8,
-          12,
-          8 + MediaQuery.viewPaddingOf(context).bottom,
-        ),
+        padding: const EdgeInsets.fromLTRB(10, 6, 10, 8),
         child: Column(
           children: <Widget>[
-            SegmentedButton<ComparisonDisplayMode>(
+            _comparisonTopBar(controller),
+            const SizedBox(height: 6),
+            Expanded(
+              child: LayoutBuilder(
+                builder: (context, constraints) => Stack(
+                  fit: StackFit.expand,
+                  children: <Widget>[
+                    GestureDetector(
+                      key: const Key('alignment-gesture-area'),
+                      behavior: HitTestBehavior.opaque,
+                      onScaleStart: _alignmentMode
+                          ? (details) => _onAlignmentStart(
+                              controller,
+                              details,
+                              constraints.biggest,
+                            )
+                          : null,
+                      onScaleUpdate: _alignmentMode
+                          ? (details) => _onAlignmentUpdate(controller, details)
+                          : null,
+                      onScaleEnd: _alignmentMode
+                          ? (_) => unawaited(_savePair(controller))
+                          : null,
+                      child: _videoArea(controller, frameA, frameB),
+                    ),
+                    if (_alignmentMode)
+                      Positioned(
+                        top: 8,
+                        left: 12,
+                        right: 12,
+                        child: IgnorePointer(
+                          child: Center(
+                            child: DecoratedBox(
+                              decoration: BoxDecoration(
+                                color: Colors.black.withValues(alpha: 0.72),
+                                borderRadius: BorderRadius.circular(18),
+                              ),
+                              child: const Padding(
+                                padding: EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                  vertical: 7,
+                                ),
+                                child: Text(
+                                  '触った映像を操作（ドラッグ／ピンチ／2本指回転）',
+                                  style: TextStyle(color: Colors.white),
+                                  textAlign: TextAlign.center,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 6),
+            if (_referenceStep != _ReferenceStep.none)
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxHeight: 190),
+                child: SingleChildScrollView(
+                  key: const Key('comparison-scroll'),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: _referenceControls(controller),
+                  ),
+                ),
+              )
+            else if (_alignmentMode)
+              _alignmentBottomBar(controller)
+            else ...<Widget>[
+              _seekBar(controller),
+              _transportControls(controller),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _comparisonTopBar(ComparisonController controller) {
+    return Row(
+      children: <Widget>[
+        IconButton.filledTonal(
+          key: const Key('comparison-back'),
+          onPressed: () => context.pop(),
+          icon: const Icon(Icons.arrow_back),
+          tooltip: '戻る',
+        ),
+        const SizedBox(width: 6),
+        Expanded(
+          child: Center(
+            child: SegmentedButton<ComparisonDisplayMode>(
               key: const Key('display-mode-selector'),
               segments: const <ButtonSegment<ComparisonDisplayMode>>[
                 ButtonSegment(
                   value: ComparisonDisplayMode.overlay,
                   label: Text('透過'),
-                  icon: Icon(Icons.layers),
                 ),
                 ButtonSegment(
                   value: ComparisonDisplayMode.split,
                   label: Text('分割'),
-                  icon: Icon(Icons.splitscreen),
                 ),
               ],
               selected: <ComparisonDisplayMode>{_displayMode},
-              onSelectionChanged: (selection) => setState(() {
-                _displayMode = selection.single;
-              }),
+              onSelectionChanged: _alignmentMode
+                  ? null
+                  : (selection) => setState(() {
+                      _displayMode = selection.single;
+                      _alignmentTargetClipId = controller.trackB.clipId;
+                    }),
             ),
-            const SizedBox(height: 8),
-            Expanded(
-              child: GestureDetector(
-                key: const Key('alignment-gesture-area'),
-                behavior: HitTestBehavior.opaque,
-                onScaleStart: _alignmentMode
-                    ? (details) => _onAlignmentStart(controller, details)
-                    : null,
-                onScaleUpdate: _alignmentMode
-                    ? (details) => _onAlignmentUpdate(controller, details)
-                    : null,
-                onScaleEnd: _alignmentMode
-                    ? (_) => unawaited(_savePair(controller))
-                    : null,
-                child: _videoArea(controller, frameA, frameB),
-              ),
-            ),
-            const SizedBox(height: 6),
-            ConstrainedBox(
-              constraints: BoxConstraints(
-                maxHeight:
-                    _alignmentMode || _referenceStep != _ReferenceStep.none
-                    ? 190
-                    : 310,
-              ),
-              child: SingleChildScrollView(
-                key: const Key('comparison-scroll'),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: _alignmentMode
-                      ? _alignmentControls(controller)
-                      : _referenceStep == _ReferenceStep.none
-                      ? _normalControls(controller)
-                      : _referenceControls(controller),
-                ),
-              ),
-            ),
-          ],
+          ),
         ),
+        const SizedBox(width: 6),
+        IconButton.filledTonal(
+          key: const Key('comparison-help'),
+          onPressed: _showComparisonHelp,
+          icon: const Icon(Icons.help_outline),
+          tooltip: '説明',
+        ),
+        const SizedBox(width: 4),
+        IconButton.filledTonal(
+          key: const Key('comparison-settings'),
+          onPressed: _alignmentMode || _referenceStep != _ReferenceStep.none
+              ? null
+              : () => _showSettingsSheet(controller),
+          icon: const Icon(Icons.tune),
+          tooltip: '設定',
+        ),
+      ],
+    );
+  }
+
+  Widget _seekBar(ComparisonController controller) {
+    final elapsed = (controller.positionMs - controller.intersectionStartMs)
+        .clamp(0, double.infinity);
+    final total = controller.intersectionEndMs - controller.intersectionStartMs;
+    return Row(
+      children: <Widget>[
+        Expanded(
+          child: Slider(
+            key: const Key('comparison-seek'),
+            value: controller.positionMs,
+            min: controller.intersectionStartMs,
+            max: controller.intersectionEndMs == controller.intersectionStartMs
+                ? controller.intersectionStartMs + 1
+                : controller.intersectionEndMs,
+            onChanged: (value) => setState(() {
+              controller.seek(value);
+              _precacheUpcoming(controller);
+            }),
+          ),
+        ),
+        SizedBox(
+          width: 92,
+          child: Text(
+            '${(elapsed / 1000).toStringAsFixed(1)} / '
+            '${(total / 1000).toStringAsFixed(1)}秒',
+            key: const Key('comparison-time'),
+            textAlign: TextAlign.end,
+            style: const TextStyle(
+              fontFeatures: <FontFeature>[FontFeature.tabularFigures()],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _transportControls(ComparisonController controller) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(8, 4, 8, 2),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceAround,
+        children: <Widget>[
+          SizedBox.square(
+            dimension: 66,
+            child: IconButton.filledTonal(
+              key: const Key('step-backward'),
+              onPressed: () => setState(controller.stepBackward),
+              icon: const Icon(Icons.skip_previous, size: 30),
+              tooltip: '1コマ戻る',
+            ),
+          ),
+          SizedBox.square(
+            dimension: 80,
+            child: IconButton.filled(
+              key: const Key('play-pause'),
+              onPressed: () => setState(controller.togglePlaying),
+              icon: Icon(
+                controller.isPlaying ? Icons.pause : Icons.play_arrow,
+                size: 38,
+              ),
+            ),
+          ),
+          SizedBox.square(
+            dimension: 66,
+            child: IconButton.filledTonal(
+              key: const Key('step-forward'),
+              onPressed: () => setState(controller.stepForward),
+              icon: const Icon(Icons.skip_next, size: 30),
+              tooltip: '1コマ進む',
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -405,29 +546,50 @@ class _CompareScreenState extends ConsumerState<CompareScreen>
     final a = _frameLayer('A', controller.trackA.clipId, frameA, controller);
     final b = _frameLayer('B', controller.trackB.clipId, frameB, controller);
     if (_displayMode == ComparisonDisplayMode.overlay) {
-      return ColoredBox(
+      final targetIsB =
+          (_alignmentTargetClipId ?? controller.trackB.clipId) ==
+          controller.trackB.clipId;
+      return DecoratedBox(
         key: const Key('overlay-view'),
-        color: Colors.black,
-        child: Stack(
-          fit: StackFit.expand,
-          children: <Widget>[
-            a,
-            Opacity(
-              key: const Key('overlay-b-opacity'),
-              opacity: _overlayOpacity,
-              child: b,
-            ),
-          ],
+        decoration: BoxDecoration(
+          color: Colors.black,
+          border: _alignmentMode && targetIsB
+              ? Border.all(
+                  color: Theme.of(context).colorScheme.primary,
+                  width: 3,
+                )
+              : null,
+        ),
+        child: ClipRect(
+          child: Stack(
+            fit: StackFit.expand,
+            children: <Widget>[
+              a,
+              Opacity(
+                key: const Key('overlay-b-opacity'),
+                opacity: _overlayOpacity,
+                child: b,
+              ),
+            ],
+          ),
         ),
       );
     }
     final panels = <Widget>[
       Expanded(
-        child: ColoredBox(color: Colors.black, child: a),
+        child: _alignmentPanel(
+          key: const Key('alignment-panel-A'),
+          clipId: controller.trackA.clipId,
+          child: a,
+        ),
       ),
       const SizedBox(width: 2, height: 2),
       Expanded(
-        child: ColoredBox(color: Colors.black, child: b),
+        child: _alignmentPanel(
+          key: const Key('alignment-panel-B'),
+          clipId: controller.trackB.clipId,
+          child: b,
+        ),
       ),
     ];
     return KeyedSubtree(
@@ -435,6 +597,24 @@ class _CompareScreenState extends ConsumerState<CompareScreen>
       child: _splitAxis == ComparisonSplitAxis.vertical
           ? Column(children: panels)
           : Row(children: panels),
+    );
+  }
+
+  Widget _alignmentPanel({
+    required Key key,
+    required String clipId,
+    required Widget child,
+  }) {
+    final active = _alignmentMode && _alignmentTargetClipId == clipId;
+    return DecoratedBox(
+      key: key,
+      decoration: BoxDecoration(
+        color: Colors.black,
+        border: active
+            ? Border.all(color: Theme.of(context).colorScheme.primary, width: 3)
+            : null,
+      ),
+      child: ClipRect(child: child),
     );
   }
 
@@ -474,10 +654,23 @@ class _CompareScreenState extends ConsumerState<CompareScreen>
   void _onAlignmentStart(
     ComparisonController controller,
     ScaleStartDetails details,
+    Size areaSize,
   ) {
-    final target = _alignmentTargetClipId ?? controller.trackB.clipId;
+    final target = switch (_displayMode) {
+      ComparisonDisplayMode.overlay => controller.trackB.clipId,
+      ComparisonDisplayMode.split =>
+        _splitAxis == ComparisonSplitAxis.vertical
+            ? (details.localFocalPoint.dy < areaSize.height / 2
+                  ? controller.trackA.clipId
+                  : controller.trackB.clipId)
+            : (details.localFocalPoint.dx < areaSize.width / 2
+                  ? controller.trackA.clipId
+                  : controller.trackB.clipId),
+    };
+    _alignmentTargetClipId = target;
     _gestureStartTransform = controller.transformFor(target);
     _gestureStartFocalPoint = details.localFocalPoint;
+    setState(() {});
   }
 
   void _onAlignmentUpdate(
@@ -501,33 +694,8 @@ class _CompareScreenState extends ConsumerState<CompareScreen>
     setState(() {});
   }
 
-  List<Widget> _alignmentControls(ComparisonController controller) => <Widget>[
-    Row(
-      children: <Widget>[
-        const Expanded(child: Text('位置合わせ対象')),
-        SegmentedButton<String>(
-          key: const Key('alignment-target-selector'),
-          segments: <ButtonSegment<String>>[
-            ButtonSegment(
-              value: controller.trackA.clipId,
-              label: const Text('A'),
-            ),
-            ButtonSegment(
-              value: controller.trackB.clipId,
-              label: const Text('B'),
-            ),
-          ],
-          selected: <String>{
-            _alignmentTargetClipId ?? controller.trackB.clipId,
-          },
-          onSelectionChanged: (selection) => setState(() {
-            _alignmentTargetClipId = selection.single;
-          }),
-        ),
-      ],
-    ),
-    const SizedBox(height: 6),
-    Row(
+  Widget _alignmentBottomBar(ComparisonController controller) {
+    return Row(
       children: <Widget>[
         Expanded(
           child: OutlinedButton.icon(
@@ -552,131 +720,196 @@ class _CompareScreenState extends ConsumerState<CompareScreen>
           ),
         ),
       ],
-    ),
-    const Text('ドラッグ: 移動  ピンチ: 拡大縮小  2本指: 回転', textAlign: TextAlign.center),
-  ];
+    );
+  }
 
-  List<Widget> _normalControls(ComparisonController controller) => <Widget>[
-    Row(
-      children: <Widget>[
-        FilterChip(
-          key: const Key('alignment-mode-toggle'),
-          avatar: const Icon(Icons.open_with),
-          label: const Text('位置合わせ'),
-          selected: false,
-          onSelected: (_) => setState(() {
-            controller.setPlaying(false);
-            _alignmentTargetClipId ??= controller.trackB.clipId;
-            _alignmentMode = true;
-          }),
-        ),
-        const Spacer(),
-        Text(controller.hasSynchronizedReference ? '同期済み' : '先頭を基準に同期'),
-        TextButton(
-          key: const Key('start-reference'),
-          onPressed: () => setState(() {
-            controller.setPlaying(false);
-            _draftReferenceA = controller
-                .frameFor(controller.trackA.clipId)
-                .timeMs;
-            _draftReferenceB = controller
-                .frameFor(controller.trackB.clipId)
-                .timeMs;
-            _referenceStep = _ReferenceStep.clipA;
-          }),
-          child: Text(controller.hasSynchronizedReference ? '取り直す' : '基準を合わせる'),
-        ),
-      ],
-    ),
-    Slider(
-      key: const Key('comparison-seek'),
-      value: controller.positionMs,
-      min: controller.intersectionStartMs,
-      max: controller.intersectionEndMs == controller.intersectionStartMs
-          ? controller.intersectionStartMs + 1
-          : controller.intersectionEndMs,
-      onChanged: (value) => setState(() {
-        controller.seek(value);
-        _precacheUpcoming(controller);
-      }),
-    ),
-    Row(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: <Widget>[
-        IconButton(
-          key: const Key('step-backward'),
-          onPressed: () => setState(controller.stepBackward),
-          icon: const Icon(Icons.skip_previous),
-          tooltip: '1コマ戻る',
-        ),
-        IconButton(
-          key: const Key('play-pause'),
-          onPressed: () => setState(controller.togglePlaying),
-          icon: Icon(controller.isPlaying ? Icons.pause : Icons.play_arrow),
-        ),
-        IconButton(
-          key: const Key('step-forward'),
-          onPressed: () => setState(controller.stepForward),
-          icon: const Icon(Icons.skip_next),
-          tooltip: '1コマ進む',
-        ),
-        const SizedBox(width: 12),
-        FilterChip(
-          label: const Text('ループ'),
-          selected: controller.loop,
-          onSelected: (value) => setState(() => controller.setLoop(value)),
-        ),
-      ],
-    ),
-    Wrap(
-      alignment: WrapAlignment.center,
-      spacing: 8,
-      children: <Widget>[
-        for (final speed in <double>[0.25, 0.5, 1])
-          ChoiceChip(
-            label: Text('${speed}x'),
-            selected: controller.speed == speed,
-            onSelected: (_) => setState(() => controller.setSpeed(speed)),
-          ),
-      ],
-    ),
-    if (_displayMode == ComparisonDisplayMode.overlay)
-      Row(
-        children: <Widget>[
-          const Text('B 透過'),
-          Expanded(
-            child: Slider(
-              key: const Key('overlay-opacity-slider'),
-              value: _overlayOpacity,
-              divisions: 20,
-              label: '${(_overlayOpacity * 100).round()}%',
-              onChanged: (value) => setState(() => _overlayOpacity = value),
-              onChangeEnd: (_) => unawaited(_savePair(controller)),
-            ),
-          ),
-          SizedBox(
-            width: 44,
-            child: Text('${(_overlayOpacity * 100).round()}%'),
-          ),
-        ],
+  Future<void> _showComparisonHelp() => showDialog<void>(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: const Text('比較画面の使い方'),
+      content: const Text(
+        '透過は2本を重ね、分割は上下または左右に並べます。\n\n'
+        '基準同期では、AとBそれぞれの同じ瞬間を選んで再生位置を揃えます。\n\n'
+        '位置合わせでは、ドラッグで移動、ピンチで拡大縮小、2本指で回転できます。',
       ),
-    if (_displayMode == ComparisonDisplayMode.split)
-      SegmentedButton<ComparisonSplitAxis>(
-        key: const Key('split-axis-selector'),
-        segments: const <ButtonSegment<ComparisonSplitAxis>>[
-          ButtonSegment(value: ComparisonSplitAxis.vertical, label: Text('上下')),
-          ButtonSegment(
-            value: ComparisonSplitAxis.horizontal,
-            label: Text('左右'),
-          ),
-        ],
-        selected: <ComparisonSplitAxis>{_splitAxis},
-        onSelectionChanged: (selection) {
-          setState(() => _splitAxis = selection.single);
-          unawaited(_savePair(controller));
+      actions: <Widget>[
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('閉じる'),
+        ),
+      ],
+    ),
+  );
+
+  void _beginReference(ComparisonController controller) {
+    setState(() {
+      controller.setPlaying(false);
+      _draftReferenceA = controller.frameFor(controller.trackA.clipId).timeMs;
+      _draftReferenceB = controller.frameFor(controller.trackB.clipId).timeMs;
+      _referenceStep = _ReferenceStep.clipA;
+    });
+  }
+
+  Future<void> _showSettingsSheet(ComparisonController controller) async {
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (sheetContext) => StatefulBuilder(
+        builder: (context, setSheetState) {
+          void refresh(VoidCallback change) {
+            setState(change);
+            setSheetState(() {});
+          }
+
+          return SafeArea(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+              child: Column(
+                key: const Key('comparison-settings-sheet'),
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: <Widget>[
+                  Text('比較設定', style: Theme.of(context).textTheme.titleLarge),
+                  const SizedBox(height: 8),
+                  _settingsRow(
+                    label: '再生',
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: FilterChip(
+                        key: const Key('loop-toggle'),
+                        label: const Text('ループ'),
+                        selected: controller.loop,
+                        onSelected: (value) =>
+                            refresh(() => controller.setLoop(value)),
+                      ),
+                    ),
+                  ),
+                  _settingsRow(
+                    label: '速度',
+                    child: SegmentedButton<double>(
+                      key: const Key('speed-selector'),
+                      segments: const <ButtonSegment<double>>[
+                        ButtonSegment(value: 0.25, label: Text('0.25x')),
+                        ButtonSegment(value: 0.5, label: Text('0.5x')),
+                        ButtonSegment(value: 1, label: Text('1.0x')),
+                      ],
+                      selected: <double>{controller.speed},
+                      onSelectionChanged: (selection) =>
+                          refresh(() => controller.setSpeed(selection.single)),
+                    ),
+                  ),
+                  if (_displayMode == ComparisonDisplayMode.overlay)
+                    _settingsRow(
+                      label: 'B 透過',
+                      child: Row(
+                        children: <Widget>[
+                          Expanded(
+                            child: Slider(
+                              key: const Key('overlay-opacity-slider'),
+                              value: _overlayOpacity,
+                              divisions: 20,
+                              onChanged: (value) =>
+                                  refresh(() => _overlayOpacity = value),
+                              onChangeEnd: (_) =>
+                                  unawaited(_savePair(controller)),
+                            ),
+                          ),
+                          SizedBox(
+                            width: 44,
+                            child: Text('${(_overlayOpacity * 100).round()}%'),
+                          ),
+                        ],
+                      ),
+                    ),
+                  if (_displayMode == ComparisonDisplayMode.split)
+                    _settingsRow(
+                      label: '分割方向',
+                      child: SegmentedButton<ComparisonSplitAxis>(
+                        key: const Key('split-axis-selector'),
+                        segments: const <ButtonSegment<ComparisonSplitAxis>>[
+                          ButtonSegment(
+                            value: ComparisonSplitAxis.vertical,
+                            label: Text('上下'),
+                          ),
+                          ButtonSegment(
+                            value: ComparisonSplitAxis.horizontal,
+                            label: Text('左右'),
+                          ),
+                        ],
+                        selected: <ComparisonSplitAxis>{_splitAxis},
+                        onSelectionChanged: (selection) {
+                          refresh(() => _splitAxis = selection.single);
+                          unawaited(_savePair(controller));
+                        },
+                      ),
+                    ),
+                  _settingsRow(
+                    label: '位置合わせ',
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: FilledButton.tonalIcon(
+                        key: const Key('alignment-mode-toggle'),
+                        onPressed: () {
+                          Navigator.pop(sheetContext);
+                          setState(() {
+                            controller.setPlaying(false);
+                            _alignmentTargetClipId = controller.trackB.clipId;
+                            _alignmentMode = true;
+                          });
+                        },
+                        icon: const Icon(Icons.open_with),
+                        label: const Text('位置合わせを開始'),
+                      ),
+                    ),
+                  ),
+                  _settingsRow(
+                    label: '同期',
+                    child: Wrap(
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      spacing: 8,
+                      children: <Widget>[
+                        Text(
+                          controller.hasSynchronizedReference
+                              ? '✓ 同期済み'
+                              : '先頭を基準に同期',
+                        ),
+                        TextButton(
+                          key: const Key('start-reference'),
+                          onPressed: () {
+                            Navigator.pop(sheetContext);
+                            _beginReference(controller);
+                          },
+                          child: Text(
+                            controller.hasSynchronizedReference
+                                ? '基準を取り直す'
+                                : '基準を合わせる',
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
         },
       ),
-  ];
+    );
+  }
+
+  Widget _settingsRow({required String label, required Widget child}) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 7),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: <Widget>[
+          SizedBox(width: 82, child: Text(label)),
+          const SizedBox(width: 8),
+          Expanded(child: child),
+        ],
+      ),
+    );
+  }
 
   Future<void> _savePair(ComparisonController controller) async {
     await ref

@@ -9,6 +9,7 @@ import 'package:go_router/go_router.dart';
 import '../capture/capture_session_machine.dart';
 import '../capture/grid_overlay.dart';
 import '../models/app_settings.dart';
+import '../native/capture_device_bridge.dart';
 import '../providers/clip_providers.dart';
 import '../providers/settings_providers.dart';
 
@@ -28,23 +29,47 @@ class _CaptureScreenState extends ConsumerState<CaptureScreen>
   String? _cameraErrorCode;
   bool _isInitializing = true;
   bool _isSaving = false;
+  bool _gallerySaveSupported = false;
+  late final CaptureDeviceBridge _deviceBridge;
+  late final RecordedVideoSaver _recordedVideoSaver;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _deviceBridge = ref.read(captureDeviceBridgeProvider);
+    _recordedVideoSaver = RecordedVideoSaver(_deviceBridge);
     unawaited(
       SystemChrome.setPreferredOrientations(<DeviceOrientation>[
         DeviceOrientation.portraitUp,
       ]),
     );
     unawaited(_initializeCamera());
+    unawaited(_initializeDeviceFeatures());
+  }
+
+  Future<void> _initializeDeviceFeatures() async {
+    try {
+      final supported = await _deviceBridge.isGallerySaveSupported();
+      if (mounted) {
+        setState(() => _gallerySaveSupported = supported);
+      }
+      await _deviceBridge.enableVolumeKeyCapture(() {
+        if (!mounted) return;
+        final settings =
+            ref.read(appSettingsProvider).value ?? AppSettings.defaults;
+        _onRecordPressed(settings);
+      });
+    } on Object {
+      // Camera controls remain usable if optional native integrations fail.
+    }
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _ticker?.cancel();
+    unawaited(_deviceBridge.disableVolumeKeyCapture().catchError((_) {}));
     unawaited(_disposeCamera());
     unawaited(SystemChrome.setPreferredOrientations(DeviceOrientation.values));
     super.dispose();
@@ -205,12 +230,28 @@ class _CaptureScreenState extends ConsumerState<CaptureScreen>
       final durationMs =
           _recordingStopwatch?.elapsedMilliseconds ??
           _session.recordingElapsedSeconds * 1000;
-      await ref
-          .read(clipListProvider.notifier)
-          .importVideoPath(recordedFile.path, durationMs: durationMs);
+      final settings =
+          ref.read(appSettingsProvider).value ?? AppSettings.defaults;
+      final result = await _recordedVideoSaver.save(
+        sourcePath: recordedFile.path,
+        durationMs: durationMs,
+        saveToGallery: settings.saveToGallery,
+        gallerySaveSupported: _gallerySaveSupported,
+        importIntoLibrary: (path, {required durationMs}) async {
+          await ref
+              .read(clipListProvider.notifier)
+              .importVideoPath(path, durationMs: durationMs);
+        },
+      );
       _session.reset();
       if (mounted) {
+        final messenger = ScaffoldMessenger.of(context);
         context.pop();
+        if (result.gallerySaveFailed) {
+          messenger.showSnackBar(
+            const SnackBar(content: Text('動画は保存しましたが、ギャラリーへコピーできませんでした。')),
+          );
+        }
       }
     } on Object {
       _session.reset();
@@ -253,63 +294,89 @@ class _CaptureScreenState extends ConsumerState<CaptureScreen>
         onRetry: _initializeCamera,
       );
     }
-    return Scaffold(
-      backgroundColor: Colors.black,
-      body: Stack(
-        fit: StackFit.expand,
-        children: <Widget>[
-          CameraPreview(_cameraController!),
-          GridOverlay(gridType: settings.gridType),
-          SafeArea(
-            child: Column(
-              children: <Widget>[
-                _CaptureTopBar(session: _session, onClose: () => context.pop()),
-                const Spacer(),
-                if (_session.phase == CapturePhase.countingDown)
-                  Text(
-                    '${_session.countdownRemaining}',
-                    key: const Key('countdown-display'),
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 96,
-                      fontWeight: FontWeight.bold,
-                      shadows: <Shadow>[Shadow(blurRadius: 8)],
-                    ),
+    return PopScope(
+      canPop:
+          _session.phase != CapturePhase.recording &&
+          _session.phase != CapturePhase.stopping &&
+          !_isSaving,
+      child: Scaffold(
+        backgroundColor: Colors.black,
+        body: Stack(
+          fit: StackFit.expand,
+          children: <Widget>[
+            CameraPreview(_cameraController!),
+            GridOverlay(gridType: settings.gridType),
+            SafeArea(
+              child: Column(
+                children: <Widget>[
+                  _CaptureTopBar(
+                    session: _session,
+                    settings: settings,
+                    gallerySaveSupported: _gallerySaveSupported,
+                    onClose: () => context.pop(),
+                    onCycleGrid: () =>
+                        ref.read(appSettingsProvider.notifier).cycleGrid(),
+                    onGalleryChanged: (enabled) => ref
+                        .read(appSettingsProvider.notifier)
+                        .setSaveToGallery(enabled),
                   ),
-                const Spacer(),
-                _CaptureControls(
-                  settings: settings,
-                  phase: _session.phase,
-                  isSaving: _isSaving,
-                  onCycleGrid: () =>
-                      ref.read(appSettingsProvider.notifier).cycleGrid(),
-                  onCycleCountdown: () =>
-                      ref.read(appSettingsProvider.notifier).cycleCountdown(),
-                  onCycleRecordingDuration: () => ref
-                      .read(appSettingsProvider.notifier)
-                      .cycleRecordingDuration(),
-                  onRecord: () => _onRecordPressed(settings),
-                ),
-              ],
+                  const Spacer(),
+                  if (_session.phase == CapturePhase.countingDown)
+                    Text(
+                      '${_session.countdownRemaining}',
+                      key: const Key('countdown-display'),
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 96,
+                        fontWeight: FontWeight.bold,
+                        shadows: <Shadow>[Shadow(blurRadius: 8)],
+                      ),
+                    ),
+                  const Spacer(),
+                  _CaptureControls(
+                    settings: settings,
+                    phase: _session.phase,
+                    isSaving: _isSaving,
+                    onCycleCountdown: () =>
+                        ref.read(appSettingsProvider.notifier).cycleCountdown(),
+                    onCycleRecordingDuration: () => ref
+                        .read(appSettingsProvider.notifier)
+                        .cycleRecordingDuration(),
+                    onRecord: () => _onRecordPressed(settings),
+                  ),
+                ],
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
 }
 
 class _CaptureTopBar extends StatelessWidget {
-  const _CaptureTopBar({required this.session, required this.onClose});
+  const _CaptureTopBar({
+    required this.session,
+    required this.settings,
+    required this.gallerySaveSupported,
+    required this.onClose,
+    required this.onCycleGrid,
+    required this.onGalleryChanged,
+  });
 
   final CaptureSessionMachine session;
+  final AppSettings settings;
+  final bool gallerySaveSupported;
   final VoidCallback onClose;
+  final VoidCallback onCycleGrid;
+  final ValueChanged<bool> onGalleryChanged;
 
   @override
   Widget build(BuildContext context) {
     final isRecording =
         session.phase == CapturePhase.recording ||
         session.phase == CapturePhase.stopping;
+    final canChange = session.phase == CapturePhase.idle;
     return Padding(
       padding: const EdgeInsets.all(12),
       child: Row(
@@ -339,6 +406,36 @@ class _CaptureTopBar extends StatelessWidget {
                   ),
                 ),
               ),
+            )
+          else
+            Flexible(
+              child: Wrap(
+                key: const Key('capture-top-settings'),
+                alignment: WrapAlignment.end,
+                spacing: 6,
+                runSpacing: 4,
+                children: <Widget>[
+                  ActionChip(
+                    key: const Key('grid-button'),
+                    avatar: const Icon(Icons.grid_on, size: 18),
+                    label: Text(settings.gridType.label),
+                    onPressed: canChange ? onCycleGrid : null,
+                  ),
+                  if (gallerySaveSupported)
+                    FilterChip(
+                      key: const Key('gallery-save-toggle'),
+                      avatar: const Icon(
+                        Icons.video_library_outlined,
+                        size: 18,
+                      ),
+                      label: Text(
+                        settings.saveToGallery ? 'ギャラリー ON' : 'ギャラリー OFF',
+                      ),
+                      selected: settings.saveToGallery,
+                      onSelected: canChange ? onGalleryChanged : null,
+                    ),
+                ],
+              ),
             ),
         ],
       ),
@@ -351,7 +448,6 @@ class _CaptureControls extends StatelessWidget {
     required this.settings,
     required this.phase,
     required this.isSaving,
-    required this.onCycleGrid,
     required this.onCycleCountdown,
     required this.onCycleRecordingDuration,
     required this.onRecord,
@@ -360,7 +456,6 @@ class _CaptureControls extends StatelessWidget {
   final AppSettings settings;
   final CapturePhase phase;
   final bool isSaving;
-  final VoidCallback onCycleGrid;
   final VoidCallback onCycleCountdown;
   final VoidCallback onCycleRecordingDuration;
   final VoidCallback onRecord;
@@ -383,14 +478,6 @@ class _CaptureControls extends StatelessWidget {
         padding: const EdgeInsets.fromLTRB(12, 12, 12, 20),
         child: Row(
           children: <Widget>[
-            Expanded(
-              child: _SettingButton(
-                key: const Key('grid-button'),
-                icon: Icons.grid_on,
-                label: settings.gridType.label,
-                onPressed: canChangeSettings ? onCycleGrid : null,
-              ),
-            ),
             Expanded(
               child: _SettingButton(
                 key: const Key('countdown-button'),

@@ -421,6 +421,9 @@ protocol FrameExtractorApi {
   func generateThumbnail(absoluteVideoPath: String, absoluteOutputPath: String, maxLongEdgePx: Int64, completion: @escaping (Result<String, Error>) -> Void)
   func extractFrames(taskId: String, request: ExtractRequest, completion: @escaping (Result<ExtractResult, Error>) -> Void)
   func cancelExtraction(taskId: String) throws
+  func isGallerySaveSupported() throws -> Bool
+  func saveVideoToGallery(absoluteVideoPath: String, completion: @escaping (Result<Void, Error>) -> Void)
+  func setVolumeKeyCaptureEnabled(enabled: Bool) throws
 }
 
 /// Generated setup class from Pigeon to handle messages through the `binaryMessenger`.
@@ -509,6 +512,53 @@ class FrameExtractorApiSetup {
     } else {
       cancelExtractionChannel.setMessageHandler(nil)
     }
+    let isGallerySaveSupportedChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.sukashi_form.FrameExtractorApi.isGallerySaveSupported\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
+    if let api = api {
+      isGallerySaveSupportedChannel.setMessageHandler { _, reply in
+        do {
+          let result = try api.isGallerySaveSupported()
+          reply(wrapResult(result))
+        } catch {
+          reply(wrapError(error))
+        }
+      }
+    } else {
+      isGallerySaveSupportedChannel.setMessageHandler(nil)
+    }
+    let saveVideoToGalleryChannel = taskQueue == nil
+      ? FlutterBasicMessageChannel(name: "dev.flutter.pigeon.sukashi_form.FrameExtractorApi.saveVideoToGallery\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
+      : FlutterBasicMessageChannel(name: "dev.flutter.pigeon.sukashi_form.FrameExtractorApi.saveVideoToGallery\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec, taskQueue: taskQueue)
+    if let api = api {
+      saveVideoToGalleryChannel.setMessageHandler { message, reply in
+        let args = message as! [Any?]
+        let absoluteVideoPathArg = args[0] as! String
+        api.saveVideoToGallery(absoluteVideoPath: absoluteVideoPathArg) { result in
+          switch result {
+          case .success:
+            reply(wrapResult(nil))
+          case .failure(let error):
+            reply(wrapError(error))
+          }
+        }
+      }
+    } else {
+      saveVideoToGalleryChannel.setMessageHandler(nil)
+    }
+    let setVolumeKeyCaptureEnabledChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.sukashi_form.FrameExtractorApi.setVolumeKeyCaptureEnabled\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
+    if let api = api {
+      setVolumeKeyCaptureEnabledChannel.setMessageHandler { message, reply in
+        let args = message as! [Any?]
+        let enabledArg = args[0] as! Bool
+        do {
+          try api.setVolumeKeyCaptureEnabled(enabled: enabledArg)
+          reply(wrapResult(nil))
+        } catch {
+          reply(wrapError(error))
+        }
+      }
+    } else {
+      setVolumeKeyCaptureEnabledChannel.setMessageHandler(nil)
+    }
   }
 }
 
@@ -530,6 +580,40 @@ class FrameExtractionProgressApi: FrameExtractionProgressApiProtocol {
     let channelName: String = "dev.flutter.pigeon.sukashi_form.FrameExtractionProgressApi.onProgress\(messageChannelSuffix)"
     let channel = FlutterBasicMessageChannel(name: channelName, binaryMessenger: binaryMessenger, codec: codec)
     channel.sendMessage([taskIdArg, completedFramesArg, totalFramesArg] as [Any?]) { response in
+      guard let listResponse = response as? [Any?] else {
+        completion(.failure(createConnectionError(withChannelName: channelName)))
+        return
+      }
+      if listResponse.count > 1 {
+        let code: String = listResponse[0] as! String
+        let message: String? = nilOrValue(listResponse[1])
+        let details: String? = nilOrValue(listResponse[2])
+        completion(.failure(PigeonError(code: code, message: message, details: details)))
+      } else {
+        completion(.success(()))
+      }
+    }
+  }
+}
+
+/// Generated protocol from Pigeon that represents Flutter messages that can be called from Swift.
+protocol VolumeKeyApiProtocol {
+  func onVolumeKeyPressed(completion: @escaping (Result<Void, PigeonError>) -> Void)
+}
+class VolumeKeyApi: VolumeKeyApiProtocol {
+  private let binaryMessenger: FlutterBinaryMessenger
+  private let messageChannelSuffix: String
+  init(binaryMessenger: FlutterBinaryMessenger, messageChannelSuffix: String = "") {
+    self.binaryMessenger = binaryMessenger
+    self.messageChannelSuffix = messageChannelSuffix.count > 0 ? ".\(messageChannelSuffix)" : ""
+  }
+  var codec: FrameExtractorApiPigeonCodec {
+    return FrameExtractorApiPigeonCodec.shared
+  }
+  func onVolumeKeyPressed(completion: @escaping (Result<Void, PigeonError>) -> Void) {
+    let channelName: String = "dev.flutter.pigeon.sukashi_form.VolumeKeyApi.onVolumeKeyPressed\(messageChannelSuffix)"
+    let channel = FlutterBasicMessageChannel(name: channelName, binaryMessenger: binaryMessenger, codec: codec)
+    channel.sendMessage(nil) { response in
       guard let listResponse = response as? [Any?] else {
         completion(.failure(createConnectionError(withChannelName: channelName)))
         return

@@ -85,9 +85,22 @@ abstract class FrameExtractorApi {
   ExtractResult extractFrames(String taskId, ExtractRequest request);
 
   void cancelExtraction(String taskId);
+
+  bool isGallerySaveSupported();
+
+  @async
+  @TaskQueue(type: TaskQueueType.serialBackgroundThread)
+  void saveVideoToGallery(String absoluteVideoPath);
+
+  void setVolumeKeyCaptureEnabled(bool enabled);
 }
 
 @FlutterApi()
 abstract class FrameExtractionProgressApi {
   void onProgress(String taskId, int completedFrames, int totalFrames);
+}
+
+@FlutterApi()
+abstract class VolumeKeyApi {
+  void onVolumeKeyPressed();
 }

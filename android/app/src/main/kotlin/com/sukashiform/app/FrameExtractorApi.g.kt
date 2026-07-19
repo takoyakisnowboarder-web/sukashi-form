@@ -412,6 +412,9 @@ interface FrameExtractorApi {
   fun generateThumbnail(absoluteVideoPath: String, absoluteOutputPath: String, maxLongEdgePx: Long, callback: (Result<String>) -> Unit)
   fun extractFrames(taskId: String, request: ExtractRequest, callback: (Result<ExtractResult>) -> Unit)
   fun cancelExtraction(taskId: String)
+  fun isGallerySaveSupported(): Boolean
+  fun saveVideoToGallery(absoluteVideoPath: String, callback: (Result<Unit>) -> Unit)
+  fun setVolumeKeyCaptureEnabled(enabled: Boolean)
 
   companion object {
     /** The codec used by FrameExtractorApi. */
@@ -504,6 +507,58 @@ interface FrameExtractorApi {
           channel.setMessageHandler(null)
         }
       }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.sukashi_form.FrameExtractorApi.isGallerySaveSupported$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { _, reply ->
+            val wrapped: List<Any?> = try {
+              listOf(api.isGallerySaveSupported())
+            } catch (exception: Throwable) {
+              FrameExtractorApiPigeonUtils.wrapError(exception)
+            }
+            reply.reply(wrapped)
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.sukashi_form.FrameExtractorApi.saveVideoToGallery$separatedMessageChannelSuffix", codec, taskQueue)
+        if (api != null) {
+          channel.setMessageHandler { message, reply ->
+            val args = message as List<Any?>
+            val absoluteVideoPathArg = args[0] as String
+            api.saveVideoToGallery(absoluteVideoPathArg) { result: Result<Unit> ->
+              val error = result.exceptionOrNull()
+              if (error != null) {
+                reply.reply(FrameExtractorApiPigeonUtils.wrapError(error))
+              } else {
+                reply.reply(FrameExtractorApiPigeonUtils.wrapResult(null))
+              }
+            }
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.sukashi_form.FrameExtractorApi.setVolumeKeyCaptureEnabled$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { message, reply ->
+            val args = message as List<Any?>
+            val enabledArg = args[0] as Boolean
+            val wrapped: List<Any?> = try {
+              api.setVolumeKeyCaptureEnabled(enabledArg)
+              listOf(null)
+            } catch (exception: Throwable) {
+              FrameExtractorApiPigeonUtils.wrapError(exception)
+            }
+            reply.reply(wrapped)
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
     }
   }
 }
@@ -521,6 +576,32 @@ class FrameExtractionProgressApi(private val binaryMessenger: BinaryMessenger, p
     val channelName = "dev.flutter.pigeon.sukashi_form.FrameExtractionProgressApi.onProgress$separatedMessageChannelSuffix"
     val channel = BasicMessageChannel<Any?>(binaryMessenger, channelName, codec)
     channel.send(listOf(taskIdArg, completedFramesArg, totalFramesArg)) {
+      if (it is List<*>) {
+        if (it.size > 1) {
+          callback(Result.failure(FlutterError(it[0] as String, it[1] as String, it[2] as String?)))
+        } else {
+          callback(Result.success(Unit))
+        }
+      } else {
+        callback(Result.failure(FrameExtractorApiPigeonUtils.createConnectionError(channelName)))
+      }
+    }
+  }
+}
+/** Generated class from Pigeon that represents Flutter messages that can be called from Kotlin. */
+class VolumeKeyApi(private val binaryMessenger: BinaryMessenger, private val messageChannelSuffix: String = "") {
+  companion object {
+    /** The codec used by VolumeKeyApi. */
+    val codec: MessageCodec<Any?> by lazy {
+      FrameExtractorApiPigeonCodec()
+    }
+  }
+  fun onVolumeKeyPressed(callback: (Result<Unit>) -> Unit)
+{
+    val separatedMessageChannelSuffix = if (messageChannelSuffix.isNotEmpty()) ".$messageChannelSuffix" else ""
+    val channelName = "dev.flutter.pigeon.sukashi_form.VolumeKeyApi.onVolumeKeyPressed$separatedMessageChannelSuffix"
+    val channel = BasicMessageChannel<Any?>(binaryMessenger, channelName, codec)
+    channel.send(null) {
       if (it is List<*>) {
         if (it.size > 1) {
           callback(Result.failure(FlutterError(it[0] as String, it[1] as String, it[2] as String?)))

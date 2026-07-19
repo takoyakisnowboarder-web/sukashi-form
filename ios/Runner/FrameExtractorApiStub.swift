@@ -42,4 +42,24 @@ final class FrameExtractorApiStub: FrameExtractorApi {
   func cancelExtraction(taskId: String) throws {
     // Android先行フェーズの空スタブ。実行中処理は存在しない。
   }
+
+  func isGallerySaveSupported() throws -> Bool {
+    // フェーズ6もAndroid先行。iOSでは設定自体を表示しない。
+    false
+  }
+
+  func saveVideoToGallery(
+    absoluteVideoPath: String,
+    completion: @escaping (Result<Void, Error>) -> Void
+  ) {
+    completion(.failure(PigeonError(
+      code: "unimplemented",
+      message: "Gallery saving is not implemented on iOS.",
+      details: nil
+    )))
+  }
+
+  func setVolumeKeyCaptureEnabled(enabled: Bool) throws {
+    // Android先行フェーズの空スタブ。
+  }
 }

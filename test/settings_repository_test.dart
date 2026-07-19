@@ -28,6 +28,7 @@ void main() {
       gridType: CameraGridType.grid4x4,
       countdownSeconds: 5,
       recordingSeconds: 20,
+      saveToGallery: false,
     );
 
     await repository.save(settings);
@@ -49,5 +50,13 @@ void main() {
       await File('${temporaryDirectory.path}/settings.json.broken').exists(),
       isTrue,
     );
+  });
+
+  test('ギャラリー保存は既定ONでOFF設定を永続化できる', () async {
+    expect((await repository.load()).saveToGallery, isTrue);
+
+    await repository.save(AppSettings.defaults.copyWith(saveToGallery: false));
+
+    expect((await repository.load()).saveToGallery, isFalse);
   });
 }

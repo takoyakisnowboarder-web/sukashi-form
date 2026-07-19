@@ -90,12 +90,8 @@ void main() {
       () => Future<void>.delayed(const Duration(milliseconds: 100)),
     );
     await _pumpFrames(tester, 20);
-    await tester.drag(
-      find.byKey(const Key('comparison-scroll')),
-      const Offset(0, -1000),
-    );
-    await tester.pump();
     expect(extractionCalls, 2);
+    await _openSettings(tester);
     expect(
       find.text('先頭を基準に同期'),
       findsOneWidget,
@@ -115,6 +111,7 @@ void main() {
     await tester.tap(find.byKey(const Key('cancel-reference')));
     await tester.pump();
 
+    await _openSettings(tester);
     expect(find.text('先頭を基準に同期'), findsOneWidget);
     expect(await pairRepository.loadAll(), isEmpty);
   });
@@ -171,7 +168,7 @@ void main() {
     await _pumpFrames(tester, 20);
 
     expect(find.byKey(const Key('overlay-view')), findsOneWidget);
-    expect(find.byKey(const Key('overlay-opacity-slider')), findsOneWidget);
+    expect(find.byKey(const Key('overlay-opacity-slider')), findsNothing);
     expect(find.byKey(const Key('frame-number-A')), findsNothing);
     await tester.drag(
       find.byKey(const Key('comparison-seek')),
@@ -182,9 +179,9 @@ void main() {
         .widget<Slider>(find.byKey(const Key('comparison-seek')))
         .value;
 
-    await tester.ensureVisible(find.byKey(const Key('alignment-mode-toggle')));
+    await _openSettings(tester);
     await tester.tap(find.byKey(const Key('alignment-mode-toggle')));
-    await tester.pump();
+    await _pumpFrames(tester, 15);
     expect(find.byKey(const Key('comparison-seek')), findsNothing);
     expect(find.byKey(const Key('reset-alignment')), findsOneWidget);
     await tester.drag(
@@ -203,7 +200,7 @@ void main() {
     await tester.tap(find.text('分割'));
     await tester.pump();
     expect(find.byKey(const Key('overlay-opacity-slider')), findsNothing);
-    expect(find.byKey(const Key('split-axis-selector')), findsOneWidget);
+    expect(find.byKey(const Key('split-axis-selector')), findsNothing);
     expect(
       tester.widget<Slider>(find.byKey(const Key('comparison-seek'))).value,
       positionBefore,
@@ -217,9 +214,12 @@ void main() {
       closeTo(24, 0.1),
     );
 
-    await tester.ensureVisible(find.text('左右'));
+    await _openSettings(tester);
+    expect(find.byKey(const Key('split-axis-selector')), findsOneWidget);
     await tester.tap(find.text('左右'));
     await tester.pump();
+    await tester.tapAt(const Offset(10, 10));
+    await _pumpFrames(tester, 15);
     expect(find.byKey(const Key('split-view-horizontal')), findsOneWidget);
     await tester.runAsync(
       () => Future<void>.delayed(const Duration(milliseconds: 50)),
@@ -243,6 +243,7 @@ void main() {
       () => Future<void>.delayed(const Duration(milliseconds: 100)),
     );
     await _pumpFrames(tester, 20);
+    await _openSettings(tester);
     await tester.drag(
       find.byKey(const Key('overlay-opacity-slider')),
       const Offset(1000, 0),
@@ -268,9 +269,9 @@ void main() {
       () => Future<void>.delayed(const Duration(milliseconds: 100)),
     );
     await _pumpFrames(tester, 20);
-    await tester.ensureVisible(find.byKey(const Key('alignment-mode-toggle')));
+    await _openSettings(tester);
     await tester.tap(find.byKey(const Key('alignment-mode-toggle')));
-    await tester.pump();
+    await _pumpFrames(tester, 15);
     await tester.drag(
       find.byKey(const Key('alignment-gesture-area')),
       const Offset(30, -20),
@@ -305,9 +306,9 @@ void main() {
       () => Future<void>.delayed(const Duration(milliseconds: 100)),
     );
     await _pumpFrames(tester, 20);
-    await tester.ensureVisible(find.byKey(const Key('alignment-mode-toggle')));
+    await _openSettings(tester);
     await tester.tap(find.byKey(const Key('alignment-mode-toggle')));
-    await tester.pump();
+    await _pumpFrames(tester, 15);
 
     final area = find.byKey(const Key('alignment-gesture-area'));
     final center = tester.getCenter(area);
@@ -336,6 +337,94 @@ void main() {
     expect(scale.transform.storage[0], greaterThan(1));
     expect(rotation.transform.storage[1].abs(), greaterThan(0.1));
   });
+
+  testWidgets('設定シートの開閉だけでは再生位置と変換が変わらない', (tester) async {
+    await _pump(
+      tester,
+      <Clip>[_clip('a', 5000), _clip('b', 5000)],
+      (_) => _completedSession(),
+      clipRepository,
+      pairRepository,
+    );
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 100)),
+    );
+    await _pumpFrames(tester, 20);
+    await tester.drag(
+      find.byKey(const Key('comparison-seek')),
+      const Offset(90, 0),
+    );
+    await tester.pump();
+    final before = tester
+        .widget<Slider>(find.byKey(const Key('comparison-seek')))
+        .value;
+
+    await _openSettings(tester);
+    expect(find.byKey(const Key('comparison-settings-sheet')), findsOneWidget);
+    await tester.tapAt(const Offset(10, 10));
+    await _pumpFrames(tester, 15);
+
+    expect(
+      tester.widget<Slider>(find.byKey(const Key('comparison-seek'))).value,
+      before,
+    );
+    expect(
+      tester
+          .widget<Transform>(find.byKey(const Key('frame-translation-b')))
+          .transform
+          .getTranslation()
+          .x,
+      0,
+    );
+  });
+
+  testWidgets('分割位置合わせでは触ったAだけが動く', (tester) async {
+    await _pump(
+      tester,
+      <Clip>[_clip('a', 5000), _clip('b', 5000)],
+      (_) => _completedSession(),
+      clipRepository,
+      pairRepository,
+    );
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 100)),
+    );
+    await _pumpFrames(tester, 20);
+    await tester.tap(find.text('分割'));
+    await tester.pump();
+    await _openSettings(tester);
+    await tester.tap(find.byKey(const Key('alignment-mode-toggle')));
+    await _pumpFrames(tester, 15);
+
+    final area = find.byKey(const Key('alignment-gesture-area'));
+    final topHalf = tester.getTopLeft(area) + const Offset(80, 100);
+    final gesture = await tester.startGesture(topHalf);
+    await gesture.moveBy(const Offset(22, 14));
+    await gesture.up();
+    await tester.pump();
+
+    expect(
+      tester
+          .widget<Transform>(find.byKey(const Key('frame-translation-a')))
+          .transform
+          .getTranslation()
+          .x,
+      closeTo(22, 0.1),
+    );
+    expect(
+      tester
+          .widget<Transform>(find.byKey(const Key('frame-translation-b')))
+          .transform
+          .getTranslation()
+          .x,
+      0,
+    );
+  });
+}
+
+Future<void> _openSettings(WidgetTester tester) async {
+  await tester.tap(find.byKey(const Key('comparison-settings')));
+  await _pumpFrames(tester, 15);
 }
 
 Future<void> _pump(

@@ -156,6 +156,20 @@ class _ComparisonRangeScreenState extends ConsumerState<ComparisonRangeScreen> {
     });
   }
 
+  Future<void> _showHelp() => showDialog<void>(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: const Text('比較範囲について'),
+      content: const Text('動画そのものは切り取られません。比較に使う範囲を選ぶだけなので、あとから何度でも変更できます。'),
+      actions: <Widget>[
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('閉じる'),
+        ),
+      ],
+    ),
+  );
+
   @override
   Widget build(BuildContext context) {
     final clips = ref.watch(clipListProvider).value ?? <Clip>[];
@@ -172,102 +186,142 @@ class _ComparisonRangeScreenState extends ConsumerState<ComparisonRangeScreen> {
     }
     final values = _values;
     return Scaffold(
-      appBar: AppBar(title: const Text('比較範囲を選択')),
+      appBar: AppBar(
+        title: const Text('比較範囲を選択'),
+        actions: <Widget>[
+          IconButton(
+            key: const Key('comparison-range-help'),
+            onPressed: _showHelp,
+            icon: const Icon(Icons.help_outline),
+            tooltip: '説明',
+          ),
+        ],
+      ),
       body: clip == null
           ? const Center(child: Text('クリップが見つかりません。'))
-          : ListView(
-              padding: const EdgeInsets.all(16),
-              children: <Widget>[
-                const Text('動画は切り取られません。比較に使う範囲を選ぶだけで、あとから何度でも変更できます。'),
-                const SizedBox(height: 20),
-                if (_preview == null && _error == null) ...<Widget>[
-                  LinearProgressIndicator(value: _progress?.fraction),
-                  const SizedBox(height: 8),
-                  Text(
-                    _progress == null
-                        ? 'プレビューを準備しています…'
-                        : 'プレビュー ${_progress!.completedFrames} / '
-                              '${_progress!.totalFrames}',
-                    textAlign: TextAlign.center,
-                  ),
-                ],
-                if (_error != null)
-                  Text(
-                    _error!,
-                    style: TextStyle(
-                      color: Theme.of(context).colorScheme.error,
-                    ),
-                  ),
-                if (_preview case final preview?) ...<Widget>[
-                  _HandlePreview(
-                    paths: preview.absoluteFramePaths,
-                    durationMs: clip.durationMs,
-                    positionMs: _activeHandleMs ?? values?.start ?? 0,
-                  ),
-                  const SizedBox(height: 12),
-                ],
-                if (values != null) ...<Widget>[
-                  SizedBox(
-                    height: 88,
-                    child: Stack(
-                      fit: StackFit.expand,
-                      children: <Widget>[
-                        if (_preview case final preview?)
-                          _PreviewStrip(paths: preview.absoluteFramePaths)
-                        else
-                          ColoredBox(
-                            color: Theme.of(
-                              context,
-                            ).colorScheme.surfaceContainerHighest,
+          : Padding(
+              padding: EdgeInsets.fromLTRB(
+                14,
+                4,
+                14,
+                8 + MediaQuery.viewPaddingOf(context).bottom,
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: <Widget>[
+                  Expanded(
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(14),
+                      child: ColoredBox(
+                        color: Colors.black,
+                        child: switch (_preview) {
+                          final preview? => _HandlePreview(
+                            paths: preview.absoluteFramePaths,
+                            durationMs: clip.durationMs,
+                            positionMs: _activeHandleMs ?? values?.start ?? 0,
                           ),
-                        RangeSlider(
-                          key: const Key('comparison-range-slider'),
-                          values: values,
-                          min: 0,
-                          max: math.max(1, clip.durationMs).toDouble(),
-                          divisions: math.max(1, clip.durationMs ~/ 100),
-                          labels: RangeLabels(
-                            _formatSeconds(values.start),
-                            _formatSeconds(values.end),
+                          null => Center(
+                            child: _error != null
+                                ? Padding(
+                                    padding: const EdgeInsets.all(20),
+                                    child: Text(
+                                      _error!,
+                                      textAlign: TextAlign.center,
+                                      style: TextStyle(
+                                        color: Theme.of(
+                                          context,
+                                        ).colorScheme.errorContainer,
+                                      ),
+                                    ),
+                                  )
+                                : Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: <Widget>[
+                                      CircularProgressIndicator(
+                                        value: _progress?.fraction,
+                                      ),
+                                      const SizedBox(height: 12),
+                                      Text(
+                                        _progress == null
+                                            ? 'プレビューを準備しています…'
+                                            : 'プレビュー ${_progress!.completedFrames} / '
+                                                  '${_progress!.totalFrames}',
+                                        style: const TextStyle(
+                                          color: Colors.white,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
                           ),
-                          onChanged: _saving ? null : _changeRange,
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-                const SizedBox(height: 16),
-                if (values != null) ...<Widget>[
-                  Text(
-                    '選択中: ${_formatSeconds(values.end - values.start)}',
-                    key: const Key('selected-range-duration'),
-                    style: Theme.of(context).textTheme.titleMedium,
-                    textAlign: TextAlign.center,
-                  ),
-                  if (!_isValidRange)
-                    Text(
-                      '比較範囲は10秒以内にしてください。',
-                      key: const Key('range-validation-error'),
-                      style: TextStyle(
-                        color: Theme.of(context).colorScheme.error,
+                        },
                       ),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  if (values != null) ...<Widget>[
+                    SizedBox(
+                      height: 64,
+                      child: Stack(
+                        fit: StackFit.expand,
+                        children: <Widget>[
+                          if (_preview case final preview?)
+                            _PreviewStrip(paths: preview.absoluteFramePaths)
+                          else
+                            ColoredBox(
+                              color: Theme.of(
+                                context,
+                              ).colorScheme.surfaceContainerHighest,
+                            ),
+                          RangeSlider(
+                            key: const Key('comparison-range-slider'),
+                            values: values,
+                            min: 0,
+                            max: math.max(1, clip.durationMs).toDouble(),
+                            divisions: math.max(1, clip.durationMs ~/ 100),
+                            labels: RangeLabels(
+                              _formatSeconds(values.start),
+                              _formatSeconds(values.end),
+                            ),
+                            onChanged: _saving ? null : _changeRange,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: 8),
+                  if (values != null) ...<Widget>[
+                    Text(
+                      '選択中: ${_formatSeconds(values.end - values.start)} '
+                      '/ 全体${_formatSeconds(clip.durationMs)}',
+                      key: const Key('selected-range-duration'),
+                      style: Theme.of(context).textTheme.titleMedium,
                       textAlign: TextAlign.center,
                     ),
+                    if (!_isValidRange)
+                      Text(
+                        '比較範囲は10秒以内にしてください。',
+                        key: const Key('range-validation-error'),
+                        style: TextStyle(
+                          color: Theme.of(context).colorScheme.error,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                  ],
+                  const SizedBox(height: 8),
+                  FilledButton(
+                    key: const Key('save-comparison-range'),
+                    onPressed: _isValidRange && !_saving ? _save : null,
+                    child: const Text('保存'),
+                  ),
+                  TextButton(
+                    key: const Key('reset-comparison-range'),
+                    onPressed: !_saving && clip.hasComparisonRange
+                        ? _reset
+                        : null,
+                    child: const Text('リセット'),
+                  ),
                 ],
-                const SizedBox(height: 20),
-                FilledButton(
-                  key: const Key('save-comparison-range'),
-                  onPressed: _isValidRange && !_saving ? _save : null,
-                  child: const Text('保存'),
-                ),
-                TextButton(
-                  key: const Key('reset-comparison-range'),
-                  onPressed: !_saving && clip.hasComparisonRange
-                      ? _reset
-                      : null,
-                  child: const Text('リセット'),
-                ),
-              ],
+              ),
             ),
     );
   }

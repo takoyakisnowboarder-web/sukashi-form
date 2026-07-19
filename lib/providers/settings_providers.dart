@@ -37,6 +37,11 @@ class AppSettingsNotifier extends AsyncNotifier<AppSettings> {
     );
   }
 
+  Future<void> setSaveToGallery(bool enabled) async {
+    final current = state.value ?? AppSettings.defaults;
+    await _save(current.copyWith(saveToGallery: enabled));
+  }
+
   Future<void> _save(AppSettings settings) async {
     state = const AsyncLoading<AppSettings>();
     state = await AsyncValue.guard(() async {

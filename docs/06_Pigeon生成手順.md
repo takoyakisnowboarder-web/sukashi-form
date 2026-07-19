@@ -27,3 +27,8 @@ Dart・Kotlin・Swiftを再生成した。既存の`probe`と`generateThumbnail`
 
 2026-07-18に`ExtractRequest`へ`rangeStartMs`と`rangeEndMs`を追加し、
 Dart・Kotlin・Swiftを再生成した。既存APIのシグネチャは変更していない。
+
+## フェーズ6での拡張
+
+2026-07-19にAndroidのMediaStore保存、音量キー捕捉の有効・無効、
+音量キー通知を追加した。フレーム抽出系の既存シグネチャは変更していない。
