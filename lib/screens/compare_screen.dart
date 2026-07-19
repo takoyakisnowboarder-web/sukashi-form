@@ -412,14 +412,15 @@ class _CompareScreenState extends ConsumerState<CompareScreen>
           child: Center(
             child: SegmentedButton<ComparisonDisplayMode>(
               key: const Key('display-mode-selector'),
+              // softWrap:false で「透過」が縦に割れるのを防ぐ。
               segments: const <ButtonSegment<ComparisonDisplayMode>>[
                 ButtonSegment(
                   value: ComparisonDisplayMode.overlay,
-                  label: Text('透過'),
+                  label: Text('透過', softWrap: false),
                 ),
                 ButtonSegment(
                   value: ComparisonDisplayMode.split,
-                  label: Text('分割'),
+                  label: Text('分割', softWrap: false),
                 ),
               ],
               selected: <ComparisonDisplayMode>{_displayMode},
@@ -788,10 +789,23 @@ class _CompareScreenState extends ConsumerState<CompareScreen>
                     label: '速度',
                     child: SegmentedButton<double>(
                       key: const Key('speed-selector'),
+                      // 選択中はチェックアイコンが入る分だけ幅が減るため、
+                      // ラベルを短く保たないと末尾が切れる(「1.0x」→「1.0」)。
+                      // softWrap:false は折り返しも防ぐ。
+                      showSelectedIcon: false,
                       segments: const <ButtonSegment<double>>[
-                        ButtonSegment(value: 0.25, label: Text('0.25x')),
-                        ButtonSegment(value: 0.5, label: Text('0.5x')),
-                        ButtonSegment(value: 1, label: Text('1.0x')),
+                        ButtonSegment(
+                          value: 0.25,
+                          label: Text('0.25x', softWrap: false),
+                        ),
+                        ButtonSegment(
+                          value: 0.5,
+                          label: Text('0.5x', softWrap: false),
+                        ),
+                        ButtonSegment(
+                          value: 1,
+                          label: Text('1.0x', softWrap: false),
+                        ),
                       ],
                       selected: <double>{controller.speed},
                       onSelectionChanged: (selection) =>
@@ -903,7 +917,8 @@ class _CompareScreenState extends ConsumerState<CompareScreen>
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: <Widget>[
-          SizedBox(width: 82, child: Text(label)),
+          // 「位置合わせ」(5文字)が折り返さない幅を確保する。
+          SizedBox(width: 96, child: Text(label, softWrap: false)),
           const SizedBox(width: 8),
           Expanded(child: child),
         ],

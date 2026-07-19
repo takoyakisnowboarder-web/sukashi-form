@@ -378,65 +378,76 @@ class _CaptureTopBar extends StatelessWidget {
         session.phase == CapturePhase.stopping;
     final canChange = session.phase == CapturePhase.idle;
     return Padding(
-      padding: const EdgeInsets.all(12),
+      // 右側は端末端ぎりぎりだとチップのラベル末尾が切れるため広めに取る。
+      padding: const EdgeInsets.fromLTRB(12, 12, 20, 12),
       child: Row(
         children: <Widget>[
           IconButton.filledTonal(
             onPressed: isRecording ? null : onClose,
             icon: const Icon(Icons.close),
           ),
-          const Spacer(),
-          if (isRecording)
-            DecoratedBox(
-              decoration: BoxDecoration(
-                color: Colors.black54,
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 14,
-                  vertical: 8,
-                ),
-                child: Text(
-                  '残り ${session.recordingRemainingSeconds}秒',
-                  key: const Key('recording-remaining'),
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ),
-            )
-          else
-            Flexible(
-              child: Wrap(
-                key: const Key('capture-top-settings'),
-                alignment: WrapAlignment.end,
-                spacing: 6,
-                runSpacing: 4,
-                children: <Widget>[
-                  ActionChip(
-                    key: const Key('grid-button'),
-                    avatar: const Icon(Icons.grid_on, size: 18),
-                    label: Text(settings.gridType.label),
-                    onPressed: canChange ? onCycleGrid : null,
-                  ),
-                  if (gallerySaveSupported)
-                    FilterChip(
-                      key: const Key('gallery-save-toggle'),
-                      avatar: const Icon(
-                        Icons.video_library_outlined,
-                        size: 18,
+          const SizedBox(width: 8),
+          // Spacer(flex:1)を使うと、後続のFlexible(既定flex:1)と横幅を50:50で
+          // 分け合ってしまい、右側のチップ列が画面残り幅の半分しか使えず
+          // ラベルがフェード表示で切り詰められる。Expanded+右寄せAlignで
+          // 残り幅を丸ごとチップ側に渡す。
+          Expanded(
+            child: Align(
+              alignment: AlignmentDirectional.centerEnd,
+              child: isRecording
+                  ? DecoratedBox(
+                      decoration: BoxDecoration(
+                        color: Colors.black54,
+                        borderRadius: BorderRadius.circular(20),
                       ),
-                      label: Text(
-                        settings.saveToGallery ? 'ギャラリー ON' : 'ギャラリー OFF',
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 14,
+                          vertical: 8,
+                        ),
+                        child: Text(
+                          '残り ${session.recordingRemainingSeconds}秒',
+                          key: const Key('recording-remaining'),
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
                       ),
-                      selected: settings.saveToGallery,
-                      onSelected: canChange ? onGalleryChanged : null,
+                    )
+                  : Wrap(
+                      key: const Key('capture-top-settings'),
+                      alignment: WrapAlignment.end,
+                      spacing: 6,
+                      runSpacing: 4,
+                      children: <Widget>[
+                        ActionChip(
+                          key: const Key('grid-button'),
+                          avatar: const Icon(Icons.grid_on, size: 18),
+                          label: Text(settings.gridType.label),
+                          onPressed: canChange ? onCycleGrid : null,
+                        ),
+                        if (gallerySaveSupported)
+                          FilterChip(
+                            key: const Key('gallery-save-toggle'),
+                            avatar: const Icon(
+                              Icons.video_library_outlined,
+                              size: 18,
+                            ),
+                            // 「ギャラリー ON/OFF」だと幅が足りず末尾が切れるため、
+                            // ラベルは短く固定し、ON/OFFはFilterChipの選択状態
+                            // (チェックマーク)で示す。
+                            label: const Text('ギャラリー'),
+                            tooltip: settings.saveToGallery
+                                ? 'ギャラリーへ自動保存: ON'
+                                : 'ギャラリーへ自動保存: OFF',
+                            selected: settings.saveToGallery,
+                            onSelected: canChange ? onGalleryChanged : null,
+                          ),
+                      ],
                     ),
-                ],
-              ),
             ),
+          ),
         ],
       ),
     );
