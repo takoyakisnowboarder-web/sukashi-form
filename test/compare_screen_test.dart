@@ -5,10 +5,12 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:sukashi_form/capture/grid_overlay.dart';
 import 'package:sukashi_form/comparison/comparison_controller.dart';
 import 'package:sukashi_form/data/clip_repository.dart';
 import 'package:sukashi_form/data/comparison_pair_repository.dart';
 import 'package:sukashi_form/data/frame_cache_service.dart';
+import 'package:sukashi_form/models/app_settings.dart';
 import 'package:sukashi_form/models/clip.dart';
 import 'package:sukashi_form/models/comparison_pair.dart';
 import 'package:sukashi_form/providers/clip_providers.dart';
@@ -418,6 +420,135 @@ void main() {
           .getTranslation()
           .x,
       0,
+    );
+  });
+
+  testWidgets('透過の操作対象は設定シートでAへ切り替えられる', (tester) async {
+    await _pump(
+      tester,
+      <Clip>[_clip('a', 5000), _clip('b', 5000)],
+      (_) => _completedSession(),
+      clipRepository,
+      pairRepository,
+    );
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 100)),
+    );
+    await _pumpFrames(tester, 20);
+
+    await _openSettings(tester);
+    final targetA = find.descendant(
+      of: find.byKey(const Key('alignment-target-settings')),
+      matching: find.text('A'),
+    );
+    expect(targetA, findsOneWidget);
+    await tester.tap(targetA);
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('alignment-mode-toggle')));
+    await _pumpFrames(tester, 15);
+
+    expect(find.byKey(const Key('alignment-target-selector')), findsNothing);
+    await tester.drag(
+      find.byKey(const Key('alignment-gesture-area')),
+      const Offset(24, 18),
+    );
+    await tester.pump();
+    expect(
+      tester
+          .widget<Transform>(find.byKey(const Key('frame-translation-a')))
+          .transform
+          .getTranslation()
+          .x,
+      closeTo(24, 0.1),
+    );
+    expect(
+      tester
+          .widget<Transform>(find.byKey(const Key('frame-translation-b')))
+          .transform
+          .getTranslation()
+          .x,
+      0,
+    );
+  });
+
+  testWidgets('位置合わせ中も設定から透過の操作対象を切り替えられる', (tester) async {
+    await _pump(
+      tester,
+      <Clip>[_clip('a', 5000), _clip('b', 5000)],
+      (_) => _completedSession(),
+      clipRepository,
+      pairRepository,
+    );
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 100)),
+    );
+    await _pumpFrames(tester, 20);
+
+    await _openSettings(tester);
+    await tester.tap(find.byKey(const Key('alignment-mode-toggle')));
+    await _pumpFrames(tester, 15);
+    await _openSettings(tester);
+    final targetA = find.descendant(
+      of: find.byKey(const Key('alignment-target-settings')),
+      matching: find.text('A'),
+    );
+    await tester.tap(targetA);
+    await tester.pump();
+    await tester.tapAt(const Offset(10, 10));
+    await _pumpFrames(tester, 15);
+
+    await tester.drag(
+      find.byKey(const Key('alignment-gesture-area')),
+      const Offset(20, 12),
+    );
+    await tester.pump();
+    expect(
+      tester
+          .widget<Transform>(find.byKey(const Key('frame-translation-a')))
+          .transform
+          .getTranslation()
+          .x,
+      closeTo(20, 0.1),
+    );
+    expect(
+      tester
+          .widget<Transform>(find.byKey(const Key('frame-translation-b')))
+          .transform
+          .getTranslation()
+          .x,
+      0,
+    );
+  });
+
+  testWidgets('比較グリッドは設定シートでONと種類選択を保存する', (tester) async {
+    await _pump(
+      tester,
+      <Clip>[_clip('a', 5000), _clip('b', 5000)],
+      (_) => _completedSession(),
+      clipRepository,
+      pairRepository,
+    );
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 100)),
+    );
+    await _pumpFrames(tester, 20);
+
+    await _openSettings(tester);
+    await tester.tap(find.byKey(const Key('comparison-grid-toggle')));
+    await tester.pump();
+    expect(find.byKey(const Key('comparison-grid-type-cross')), findsOneWidget);
+    await tester.tap(find.byKey(const Key('comparison-grid-type-cross')));
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('alignment-mode-toggle')));
+    await _pumpFrames(tester, 15);
+
+    expect(find.byType(GridOverlay), findsOneWidget);
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 50)),
+    );
+    expect(
+      (await pairRepository.loadAll()).single.gridType,
+      CameraGridType.cross,
     );
   });
 }

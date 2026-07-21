@@ -6,8 +6,10 @@ import 'package:flutter/scheduler.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../capture/grid_overlay.dart';
 import '../comparison/comparison_controller.dart';
 import '../data/frame_cache_service.dart';
+import '../models/app_settings.dart';
 import '../models/clip.dart';
 import '../models/comparison_pair.dart';
 import '../providers/clip_providers.dart';
@@ -53,6 +55,7 @@ class _CompareScreenState extends ConsumerState<CompareScreen>
   ComparisonDisplayMode _displayMode = ComparisonDisplayMode.overlay;
   ComparisonSplitAxis _splitAxis = ComparisonSplitAxis.vertical;
   double _overlayOpacity = 0.5;
+  CameraGridType _gridType = CameraGridType.none;
   bool _alignmentMode = false;
   String? _alignmentTargetClipId;
   AlignmentTransform? _gestureStartTransform;
@@ -189,6 +192,7 @@ class _CompareScreenState extends ConsumerState<CompareScreen>
       );
       _splitAxis = saved?.splitAxis ?? ComparisonSplitAxis.vertical;
       _overlayOpacity = saved?.overlayOpacity ?? 0.5;
+      _gridType = saved?.gridType ?? CameraGridType.none;
       _alignmentTargetClipId = tracks[1].clipId;
       _precacheUpcoming(_controller!);
       setState(() {});
@@ -355,13 +359,13 @@ class _CompareScreenState extends ConsumerState<CompareScreen>
                                 color: Colors.black.withValues(alpha: 0.72),
                                 borderRadius: BorderRadius.circular(18),
                               ),
-                              child: const Padding(
+                              child: Padding(
                                 padding: EdgeInsets.symmetric(
                                   horizontal: 12,
                                   vertical: 7,
                                 ),
                                 child: Text(
-                                  '触った映像を操作（ドラッグ／ピンチ／2本指回転）',
+                                  _alignmentHint(controller),
                                   style: TextStyle(color: Colors.white),
                                   textAlign: TextAlign.center,
                                 ),
@@ -443,7 +447,8 @@ class _CompareScreenState extends ConsumerState<CompareScreen>
         const SizedBox(width: 4),
         IconButton.filledTonal(
           key: const Key('comparison-settings'),
-          onPressed: _alignmentMode || _referenceStep != _ReferenceStep.none
+          // 位置合わせ中も、操作対象と比較グリッドを切り替えられるようにする。
+          onPressed: _referenceStep != _ReferenceStep.none
               ? null
               : () => _showSettingsSheet(controller),
           icon: const Icon(Icons.tune),
@@ -547,14 +552,11 @@ class _CompareScreenState extends ConsumerState<CompareScreen>
     final a = _frameLayer('A', controller.trackA.clipId, frameA, controller);
     final b = _frameLayer('B', controller.trackB.clipId, frameB, controller);
     if (_displayMode == ComparisonDisplayMode.overlay) {
-      final targetIsB =
-          (_alignmentTargetClipId ?? controller.trackB.clipId) ==
-          controller.trackB.clipId;
       return DecoratedBox(
         key: const Key('overlay-view'),
         decoration: BoxDecoration(
           color: Colors.black,
-          border: _alignmentMode && targetIsB
+          border: _alignmentMode
               ? Border.all(
                   color: Theme.of(context).colorScheme.primary,
                   width: 3,
@@ -571,6 +573,15 @@ class _CompareScreenState extends ConsumerState<CompareScreen>
                 opacity: _overlayOpacity,
                 child: b,
               ),
+              if (_alignmentMode && _gridType != CameraGridType.none)
+                GridOverlay(gridType: _gridType),
+              if (_alignmentMode)
+                _alignmentTargetBadge(
+                  (_alignmentTargetClipId ?? controller.trackB.clipId) ==
+                          controller.trackA.clipId
+                      ? 'A'
+                      : 'B',
+                ),
             ],
           ),
         ),
@@ -615,7 +626,17 @@ class _CompareScreenState extends ConsumerState<CompareScreen>
             ? Border.all(color: Theme.of(context).colorScheme.primary, width: 3)
             : null,
       ),
-      child: ClipRect(child: child),
+      child: ClipRect(
+        child: !_alignmentMode || _gridType == CameraGridType.none
+            ? child
+            : Stack(
+                fit: StackFit.expand,
+                children: <Widget>[
+                  child,
+                  GridOverlay(gridType: _gridType),
+                ],
+              ),
+      ),
     );
   }
 
@@ -658,7 +679,8 @@ class _CompareScreenState extends ConsumerState<CompareScreen>
     Size areaSize,
   ) {
     final target = switch (_displayMode) {
-      ComparisonDisplayMode.overlay => controller.trackB.clipId,
+      ComparisonDisplayMode.overlay =>
+        _alignmentTargetClipId ?? controller.trackB.clipId,
       ComparisonDisplayMode.split =>
         _splitAxis == ComparisonSplitAxis.vertical
             ? (details.localFocalPoint.dy < areaSize.height / 2
@@ -693,6 +715,32 @@ class _CompareScreenState extends ConsumerState<CompareScreen>
       ),
     );
     setState(() {});
+  }
+
+  String _alignmentHint(ComparisonController controller) {
+    if (_displayMode == ComparisonDisplayMode.split) {
+      return '触った映像を操作（ドラッグ／ピンチ／2本指回転）';
+    }
+    final target = _alignmentTargetClipId ?? controller.trackB.clipId;
+    final label = target == controller.trackA.clipId ? 'A' : 'B';
+    return '$labelを操作中（設定からA/Bを変更できます）';
+  }
+
+  Widget _alignmentTargetBadge(String label) {
+    return Positioned(
+      right: 10,
+      bottom: 10,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.primary,
+          borderRadius: BorderRadius.circular(14),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+          child: Text(label, style: const TextStyle(color: Colors.white)),
+        ),
+      ),
+    );
   }
 
   Widget _alignmentBottomBar(ComparisonController controller) {
@@ -731,7 +779,8 @@ class _CompareScreenState extends ConsumerState<CompareScreen>
       content: const Text(
         '透過は2本を重ね、分割は上下または左右に並べます。\n\n'
         '基準同期では、AとBそれぞれの同じ瞬間を選んで再生位置を揃えます。\n\n'
-        '位置合わせでは、ドラッグで移動、ピンチで拡大縮小、2本指で回転できます。',
+        '位置合わせでは、ドラッグで移動、ピンチで拡大縮小、2本指で回転できます。\n'
+        '透過の操作対象と比較グリッドは、設定から選べます。',
       ),
       actions: <Widget>[
         TextButton(
@@ -858,21 +907,85 @@ class _CompareScreenState extends ConsumerState<CompareScreen>
                       ),
                     ),
                   _settingsRow(
+                    label: '比較グリッド',
+                    child: Switch(
+                      key: const Key('comparison-grid-toggle'),
+                      value: _gridType != CameraGridType.none,
+                      onChanged: (enabled) {
+                        refresh(
+                          () => _gridType = enabled
+                              ? CameraGridType.grid3x3
+                              : CameraGridType.none,
+                        );
+                        unawaited(_savePair(controller));
+                      },
+                    ),
+                  ),
+                  if (_gridType != CameraGridType.none)
+                    _settingsRow(
+                      label: 'グリッド種類',
+                      child: Wrap(
+                        spacing: 8,
+                        runSpacing: 6,
+                        children: CameraGridType.values
+                            .where((type) => type != CameraGridType.none)
+                            .map(
+                              (type) => ChoiceChip(
+                                key: Key('comparison-grid-type-${type.name}'),
+                                label: Text(type.label),
+                                selected: _gridType == type,
+                                onSelected: (_) {
+                                  refresh(() => _gridType = type);
+                                  unawaited(_savePair(controller));
+                                },
+                              ),
+                            )
+                            .toList(),
+                      ),
+                    ),
+                  if (_displayMode == ComparisonDisplayMode.overlay)
+                    _settingsRow(
+                      label: '操作対象',
+                      child: SegmentedButton<String>(
+                        key: const Key('alignment-target-settings'),
+                        showSelectedIcon: false,
+                        segments: <ButtonSegment<String>>[
+                          ButtonSegment(
+                            value: controller.trackA.clipId,
+                            label: const Text('A'),
+                          ),
+                          ButtonSegment(
+                            value: controller.trackB.clipId,
+                            label: const Text('B'),
+                          ),
+                        ],
+                        selected: <String>{
+                          _alignmentTargetClipId ?? controller.trackB.clipId,
+                        },
+                        onSelectionChanged: (selection) => refresh(
+                          () => _alignmentTargetClipId = selection.single,
+                        ),
+                      ),
+                    ),
+                  _settingsRow(
                     label: '位置合わせ',
                     child: Align(
                       alignment: Alignment.centerLeft,
                       child: FilledButton.tonalIcon(
                         key: const Key('alignment-mode-toggle'),
-                        onPressed: () {
-                          Navigator.pop(sheetContext);
-                          setState(() {
-                            controller.setPlaying(false);
-                            _alignmentTargetClipId = controller.trackB.clipId;
-                            _alignmentMode = true;
-                          });
-                        },
+                        onPressed: _alignmentMode
+                            ? null
+                            : () {
+                                Navigator.pop(sheetContext);
+                                setState(() {
+                                  controller.setPlaying(false);
+                                  _alignmentTargetClipId ??=
+                                      controller.trackB.clipId;
+                                  _alignmentMode = true;
+                                });
+                              },
                         icon: const Icon(Icons.open_with),
-                        label: const Text('位置合わせを開始'),
+                        label: Text(_alignmentMode ? '位置合わせ中' : '位置合わせを開始'),
                       ),
                     ),
                   ),
@@ -938,6 +1051,7 @@ class _CompareScreenState extends ConsumerState<CompareScreen>
             hasSynchronizedReference: controller.hasSynchronizedReference,
             splitAxis: _splitAxis,
             overlayOpacity: _overlayOpacity,
+            gridType: _gridType,
           ),
         );
   }

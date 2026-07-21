@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:sukashi_form/comparison/comparison_controller.dart';
 import 'package:sukashi_form/data/clip_repository.dart';
 import 'package:sukashi_form/data/comparison_pair_repository.dart';
+import 'package:sukashi_form/models/app_settings.dart';
 import 'package:sukashi_form/models/comparison_pair.dart';
 import 'package:sukashi_form/models/clip.dart';
 import 'package:sukashi_form/providers/clip_providers.dart';
@@ -122,6 +123,7 @@ void main() {
       hasSynchronizedReference: false,
       splitAxis: ComparisonSplitAxis.horizontal,
       overlayOpacity: 0.75,
+      gridType: CameraGridType.cross,
     );
     await repository.savePair(settings);
 
@@ -138,6 +140,7 @@ void main() {
     expect(loaded!.hasSynchronizedReference, isFalse);
     expect(loaded.splitAxis, ComparisonSplitAxis.horizontal);
     expect(loaded.overlayOpacity, 0.75);
+    expect(loaded.gridType, CameraGridType.cross);
   });
 
   test('フェーズ4a JSONは同期済み・上下・透過50%として後方互換で読む', () async {

@@ -1,4 +1,5 @@
 import '../comparison/comparison_controller.dart';
+import 'app_settings.dart';
 
 enum ComparisonSplitAxis { vertical, horizontal }
 
@@ -18,6 +19,7 @@ class ComparisonPairSettings {
     this.hasSynchronizedReference = true,
     this.splitAxis = ComparisonSplitAxis.vertical,
     this.overlayOpacity = 0.5,
+    this.gridType = CameraGridType.none,
   }) : clipIds = (List<String>.of(<String>[firstClipId, secondClipId])..sort()),
        referenceTimesMs = Map<String, double>.unmodifiable(referenceTimesMs),
        transforms = Map<String, AlignmentTransform>.unmodifiable(transforms) {
@@ -38,6 +40,7 @@ class ComparisonPairSettings {
   final bool hasSynchronizedReference;
   final ComparisonSplitAxis splitAxis;
   final double overlayOpacity;
+  final CameraGridType gridType;
 
   String get key => keyFor(clipIds[0], clipIds[1]);
   bool containsClip(String clipId) => clipIds.contains(clipId);
@@ -48,6 +51,7 @@ class ComparisonPairSettings {
     'hasSynchronizedReference': hasSynchronizedReference,
     'splitAxis': splitAxis.name,
     'overlayOpacity': overlayOpacity,
+    'gridType': gridType.name,
     'transforms': <String, Object>{
       for (final id in clipIds) id: transforms[id]!.toJson(),
     },
@@ -81,6 +85,7 @@ class ComparisonPairSettings {
         json['splitAxis'] as String? ?? ComparisonSplitAxis.vertical.name,
       ),
       overlayOpacity: (json['overlayOpacity'] as num?)?.toDouble() ?? 0.5,
+      gridType: CameraGridType.fromName(json['gridType']),
       transforms: <String, AlignmentTransform>{
         for (final id in ids)
           id: AlignmentTransform.fromJson(
@@ -104,6 +109,7 @@ class ComparisonPairSettings {
       other.hasSynchronizedReference == hasSynchronizedReference &&
       other.splitAxis == splitAxis &&
       other.overlayOpacity == overlayOpacity &&
+      other.gridType == gridType &&
       _mapEquals(other.referenceTimesMs, referenceTimesMs) &&
       _mapEquals(other.transforms, transforms);
 
@@ -113,6 +119,7 @@ class ComparisonPairSettings {
     hasSynchronizedReference,
     splitAxis,
     overlayOpacity,
+    gridType,
     Object.hashAll(clipIds.map((id) => referenceTimesMs[id])),
     Object.hashAll(clipIds.map((id) => transforms[id])),
   );

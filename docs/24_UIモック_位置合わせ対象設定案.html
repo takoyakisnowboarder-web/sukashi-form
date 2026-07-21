@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>スカシフォーム UIモック — 位置合わせ対象の設定</title>
+<style>
+  :root{--page:#eceef3;--ink:#23252c;--sub:#5a5e6b;--card:#fff;--line:#d6d9e2;--app:#f2f3fa;--indigo:#4c5c92;--pill:#dfe3f7;--pillink:#3a4570;--cyan:#35c6e8;--coral:#ff6e5a}
+  *{box-sizing:border-box} body{margin:0;padding:32px 20px 56px;background:var(--page);color:var(--ink);font-family:"Hiragino Kaku Gothic ProN","Yu Gothic UI",Meiryo,sans-serif}
+  header{max-width:1140px;margin:0 auto 26px} h1{margin:0 0 8px;font-size:22px} header p{margin:0;color:var(--sub);font-size:14px;line-height:1.7}.notice{margin-top:14px;padding:12px 15px;border-left:4px solid var(--indigo);background:#fff;font-size:13px;line-height:1.65}
+  .frames{max-width:1140px;margin:auto;display:flex;gap:28px;flex-wrap:wrap;justify-content:center}figure{width:342px;margin:0}figcaption{margin-top:12px;color:var(--sub);font-size:13px;line-height:1.7}figcaption b{display:block;color:var(--ink);font-size:14px}figcaption ul{margin:5px 0 0;padding-left:18px}
+  .phone{height:722px;width:342px;position:relative;overflow:hidden;display:flex;flex-direction:column;background:var(--app);border:1px solid var(--line);border-radius:26px;box-shadow:0 10px 28px #1416282e;font-variant-numeric:tabular-nums}.status{height:26px;padding:0 18px;display:flex;align-items:center;justify-content:space-between;font-size:11px}.navbar{height:22px;display:flex;justify-content:center;align-items:center}.navbar i{width:110px;height:4px;border-radius:3px;background:#0004}
+  .top{padding:6px 12px 2px;display:flex;align-items:center;gap:8px}.space{flex:1}.icon{width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:var(--pill);color:var(--pillink);font-weight:700}.icon.on{background:var(--indigo);color:#fff}.seg{display:flex;border:1.5px solid var(--indigo);border-radius:20px;overflow:hidden;font-size:13px}.seg span{padding:7px 15px;color:var(--pillink)}.seg .on{background:var(--pill);font-weight:700}
+  .video{position:relative;overflow:hidden;background:linear-gradient(165deg,#23252e,#101116 70%);border-radius:14px}.layer{position:absolute;inset:0;display:flex;align-items:center;justify-content:center}.tag{position:absolute;left:10px;top:8px;color:#fff;font-size:13px}.figure{width:152px;height:238px}.figure path{fill:none;stroke-linecap:round;stroke-linejoin:round;stroke-width:9}.frame{outline:3px solid var(--indigo);outline-offset:-3px}.hint{position:absolute;left:50%;top:10px;transform:translateX(-50%);padding:7px 13px;white-space:nowrap;border-radius:16px;background:#171923d9;color:#fff;font-size:12px}.target-tag{position:absolute;right:10px;bottom:8px;color:#fff;font-size:13px;background:var(--indigo);border-radius:12px;padding:4px 8px}
+  .grid{position:absolute;inset:0;z-index:4;pointer-events:none;background:linear-gradient(to right,transparent calc(33.3% - .5px),#ffffff8a 33.3%,transparent calc(33.3% + .5px)),linear-gradient(to right,transparent calc(66.6% - .5px),#ffffff8a 66.6%,transparent calc(66.6% + .5px)),linear-gradient(to bottom,transparent calc(33.3% - .5px),#ffffff8a 33.3%,transparent calc(33.3% + .5px)),linear-gradient(to bottom,transparent calc(66.6% - .5px),#ffffff8a 66.6%,transparent calc(66.6% + .5px))}.switch{width:45px;height:25px;padding:3px;border-radius:14px;background:var(--indigo);display:inline-flex;justify-content:flex-end;align-items:center}.switch i{width:19px;height:19px;border-radius:50%;background:#fff}.state{font-size:12px;color:var(--indigo);font-weight:700}
+  .seek{display:flex;align-items:center;gap:10px;padding:10px 18px 2px}.track{height:5px;flex:1;position:relative;border-radius:3px;background:#c9cede}.track i{position:absolute;inset:0 auto 0 0;width:28%;border-radius:3px;background:var(--indigo)}.track b{position:absolute;left:28%;top:50%;width:20px;height:20px;margin:-10px 0 0 -10px;border-radius:50%;background:var(--indigo)}.seek span{font-size:12.5px;color:var(--sub);white-space:nowrap}.transport{display:flex;align-items:center;justify-content:space-evenly;padding:10px 10px 6px}.round{width:66px;height:66px;border-radius:50%;background:var(--pill);color:var(--pillink);display:grid;place-items:center;font-size:23px}.round.play{width:80px;height:80px;background:var(--indigo);color:#fff}
+  .dim{position:absolute;inset:0;background:#0f10166b}.sheet{position:absolute;right:0;bottom:0;left:0;padding:8px 20px 25px;border-radius:22px 22px 0 0;background:var(--card);box-shadow:0 -8px 28px #0a0c1833}.handle{width:44px;height:5px;margin:4px auto 14px;border-radius:3px;background:#c3c7d4}.row{display:flex;align-items:center;gap:10px;padding:9px 0;font-size:14px}.label{width:96px;flex:none;color:var(--sub);font-size:13px}.chip{padding:7px 12px;border-radius:18px;background:var(--pill);color:var(--pillink);font-size:12.5px;font-weight:600}.button{padding:10px 14px;border-radius:20px;background:var(--indigo);color:#fff;font-size:13px;font-weight:700}.target{display:flex;overflow:hidden;border:1.5px solid var(--indigo);border-radius:18px}.target span{padding:7px 14px;color:var(--pillink);font-size:12.5px}.target .on{background:var(--pill);font-weight:700}.help{font-size:11.5px;color:var(--sub);line-height:1.45}
+  .align{flex:1;display:flex;flex-direction:column;gap:6px;margin:6px 12px 0}.align .video{flex:1}.bottom{display:flex;gap:12px;padding:10px 16px 6px}.bottom div{flex:1;padding:12px 0;border-radius:24px;text-align:center;font-size:14px;font-weight:700}.reset{border:1.5px solid var(--indigo);color:var(--indigo)}.finish{background:var(--indigo);color:#fff}
+</style>
+</head>
+<body>
+<header>
+  <h1>スカシフォーム UI改修案 — 位置合わせ対象を設定シートへ収納</h1>
+  <p>比較画面の通常配置と、位置合わせ画面の下部「リセット | 完了」はUIモックV1を維持します。透過モードでは映像が重なるため、操作対象だけを右上設定シートで明示的に選びます。</p>
+  <div class="notice"><b>今回の変更点:</b> A/B選択を位置合わせ画面の下部には置きません。右上の設定シートで選択し、位置合わせ中も設定ボタンから対象を切り替えられます。枠と上部チップで、現在動かす映像を常に表示します。</div>
+</header>
+
+<main class="frames">
+  <figure>
+    <div class="phone">
+      <div class="status"><span>11:21</span><span>▮▮▮</span></div>
+      <div class="top"><span class="icon">←</span><span class="space"></span><div class="seg"><span class="on">✓ 透過</span><span>分割</span></div><span class="space"></span><span class="icon">?</span><span class="icon on">☷</span></div>
+      <div class="video" style="flex:1;margin:6px 12px 0"></div><div class="navbar"><i></i></div><div class="dim"></div>
+      <div class="sheet"><div class="handle"></div>
+        <div class="row"><span class="label">再生</span><span class="chip">✓ ループ</span></div>
+        <div class="row"><span class="label">速度</span><span class="target"><span>0.25x</span><span>0.5x</span><span class="on">1.0x</span></span></div>
+        <div class="row"><span class="label">B 透過</span><div class="track"><i style="width:50%"></i><b style="left:50%"></b></div><span>50%</span></div>
+        <div class="row"><span class="label">比較グリッド</span><span class="switch"><i></i></span><span class="state">ON</span></div>
+        <div class="row"><span class="label">グリッド種類</span><span class="chip">格子3×3　⌄</span></div>
+        <div class="row"><span class="label">操作対象</span><span class="target"><span>A</span><span class="on">✓ B</span></span></div>
+        <div class="row"><span class="label">位置合わせ</span><span class="button">✥ Bを位置合わせ</span></div>
+        <div class="help" style="margin-left:106px">透過では選択中の映像だけをドラッグ・ピンチ・回転できます。</div>
+        <div class="row"><span class="label">同期</span><span>✓ 同期済み</span><span style="margin-left:auto;color:var(--indigo)">基準を取り直す</span></div>
+      </div>
+    </div>
+    <figcaption><b>1. 設定シート（開始前）</b><ul><li>「操作対象」を設定シート内へ追加</li><li>既定はB。選んだ対象を明記した開始ボタン</li><li>通常画面の常時表示はV1のまま</li></ul></figcaption>
+  </figure>
+
+  <figure>
+    <div class="phone">
+      <div class="status"><span>11:22</span><span>▮▮▮</span></div>
+      <div class="top"><span class="space"></span><div class="seg"><span class="on">✓ 透過</span><span>分割</span></div><span class="space"></span><span class="icon">?</span><span class="icon">☷</span></div>
+      <div class="align"><div class="video frame"><span class="hint">Bを操作中　設定からA/Bを変更できます</span><span class="tag">A</span><span class="tag" style="left:auto;right:10px">B</span><div class="layer"><svg class="figure" viewBox="0 0 100 160"><circle cx="50" cy="26" r="12" fill="var(--cyan)"/><path stroke="var(--cyan)" d="M50 40 L50 95 M50 56 L20 76 M50 56 L83 48 M50 95 L30 140 M50 95 L72 138"/></svg></div><div class="layer" style="opacity:.55;transform:translate(14px,4px) rotate(4deg)"><svg class="figure" viewBox="0 0 100 160"><circle cx="50" cy="26" r="12" fill="var(--coral)"/><path stroke="var(--coral)" d="M50 40 L50 95 M50 58 L23 70 M50 58 L84 56 M50 95 L33 141 M50 95 L74 136"/></svg></div><div class="grid"></div><span class="target-tag">B</span></div></div>
+      <div class="bottom"><div class="reset">リセット</div><div class="finish">完了</div></div><div class="navbar"><i></i></div>
+    </div>
+    <figcaption><b>2. 位置合わせ中（Bを操作）</b><ul><li>V1どおり下部は「リセット | 完了」のみ</li><li>右上設定は有効のまま</li><li>グリッドON時は選択した種類（例：3×3）を比較映像の上に重ねる</li><li>枠・チップ・右下タグで対象Bを明示</li></ul></figcaption>
+  </figure>
+
+  <figure>
+    <div class="phone">
+      <div class="status"><span>11:22</span><span>▮▮▮</span></div>
+      <div class="top"><span class="space"></span><div class="seg"><span class="on">✓ 透過</span><span>分割</span></div><span class="space"></span><span class="icon">?</span><span class="icon on">☷</span></div>
+      <div class="video" style="flex:1;margin:6px 12px 0"><span class="hint">Bを操作中</span></div><div class="navbar"><i></i></div><div class="dim"></div>
+      <div class="sheet"><div class="handle"></div>
+        <div class="row"><span class="label">操作対象</span><span class="target"><span>A</span><span class="on">✓ B</span></span></div>
+        <div class="help" style="margin-left:106px">Aを選ぶと、閉じた直後からAだけを操作します。</div>
+        <div class="row"><span class="label">比較グリッド</span><span class="switch"><i></i></span><span class="state">ON</span></div>
+        <div class="row"><span class="label">グリッド種類</span><span class="chip">格子3×3　⌄</span></div>
+        <div class="row" style="margin-top:12px"><span class="label">位置合わせ</span><span class="chip">✥ 操作中</span></div>
+      </div>
+    </div>
+    <figcaption><b>3. 位置合わせ中の設定変更</b><ul><li>完了せずに右上設定から対象を切替可能</li><li>設定シート外をタップすると位置合わせ画面へ戻る</li><li>映像の変換値は切替時にも維持</li></ul></figcaption>
+  </figure>
+
+  <figure>
+    <div class="phone">
+      <div class="status"><span>11:22</span><span>▮▮▮</span></div>
+      <div class="top"><span class="space"></span><div class="seg"><span class="on">✓ 透過</span><span>分割</span></div><span class="space"></span><span class="icon">?</span><span class="icon">☷</span></div>
+      <div class="align"><div class="video frame"><span class="hint">Aを操作中　設定からA/Bを変更できます</span><span class="tag">A</span><span class="tag" style="left:auto;right:10px">B</span><div class="layer"><svg class="figure" viewBox="0 0 100 160"><circle cx="50" cy="26" r="12" fill="var(--cyan)"/><path stroke="var(--cyan)" d="M50 40 L50 95 M50 56 L20 76 M50 56 L83 48 M50 95 L30 140 M50 95 L72 138"/></svg></div><div class="layer" style="opacity:.55;transform:translate(14px,4px) rotate(4deg)"><svg class="figure" viewBox="0 0 100 160"><circle cx="50" cy="26" r="12" fill="var(--coral)"/><path stroke="var(--coral)" d="M50 40 L50 95 M50 58 L23 70 M50 58 L84 56 M50 95 L33 141 M50 95 L74 136"/></svg></div><div class="grid"></div><span class="target-tag">A</span></div></div>
+      <div class="bottom"><div class="reset">リセット</div><div class="finish">完了</div></div><div class="navbar"><i></i></div>
+    </div>
+    <figcaption><b>4. 位置合わせ中（Aを操作）</b><ul><li>対象をAへ切替後の状態</li><li>操作方法・下部配置はBの場合と同一</li><li>分割モードでは従来どおり触った側を操作</li></ul></figcaption>
+  </figure>
+</main>
+</body>
+</html>
