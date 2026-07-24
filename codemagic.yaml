@@ -1,0 +1,42 @@
+# Codemagic CI/CD 設定
+# Windows + Codemagic(macOS M2)+ iPhone で iOS をビルド・配信するための定義。
+# App Store Connect の API キー連携名「たこ焼きスノーボーダー」を使って自動署名する。
+#
+# 使い方: Codemagic のビルド開始時にワークフロー「iOS TestFlight」を選ぶ。
+# 完了すると署名付き IPA が TestFlight に自動アップロードされ、
+# iPhone/iPad の TestFlight アプリで受け取れる。
+
+workflows:
+  ios-testflight:
+    name: iOS TestFlight
+    instance_type: mac_mini_m2
+    max_build_duration: 60
+    integrations:
+      # ↓ Codemagic に登録した App Store Connect API キーの「キー名」
+      app_store_connect: たこ焼きスノーボーダー
+    environment:
+      ios_signing:
+        # App Store / TestFlight 配信用の自動署名。
+        # 証明書とプロビジョニングプロファイルは API キー経由で自動生成される。
+        distribution_type: app_store
+        bundle_identifier: com.sukashiform.sukashiForm
+      flutter: stable
+      xcode: latest
+    scripts:
+      - name: Flutter パッケージ取得
+        script: flutter pub get
+      - name: IPA ビルド
+        script: |
+          # ビルド番号を Codemagic のビルド連番にして、
+          # TestFlight への再アップロードでも一意になるようにする。
+          flutter build ipa --release \
+            --build-name=1.0.0 \
+            --build-number=$BUILD_NUMBER \
+            --export-options-plist=/Users/builder/export_options.plist
+    artifacts:
+      - build/ios/ipa/*.ipa
+    publishing:
+      app_store_connect:
+        auth: integration
+        # TestFlight に自動提出(内部テスターはBeta審査なしで即インストール可)。
+        submit_to_testflight: true
