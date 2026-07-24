@@ -68,3 +68,82 @@ workflows:
         # 外部テスター(最大10,000人)に配りたくなったら、下記URLでテスト情報を埋めてから true にする:
         #   https://appstoreconnect.apple.com/apps/6794272197/testflight/test-info
         submit_to_testflight: false
+
+  # App Store 提出には iPhone 6.5インチ・iPad 13インチのスクリーンショットが必須だが、
+  # 実機を持っていないため、Codemagic の Mac 上でシミュレータを起動して撮影する。
+  # シミュレータ用ビルドは署名不要なので、上の ios-testflight とは独立して安全に実行できる。
+  #
+  # 使い方: このワークフロー「iOS Store Screenshots」でビルドを実行し、
+  # 完了後にビルド詳細ページの Artifacts から screenshots/*.png をダウンロードして、
+  # App Store Connect の該当サイズの欄へ手動でアップロードする。
+  ios-store-screenshots:
+    name: iOS Store Screenshots
+    instance_type: mac_mini_m2
+    max_build_duration: 30
+    environment:
+      flutter: stable
+      xcode: latest
+    scripts:
+      - name: Flutter パッケージ取得
+        script: flutter pub get
+      - name: シミュレータ向けにビルド(署名不要)
+        script: flutter build ios --simulator --debug
+      - name: シミュレータでスクリーンショットを撮影
+        script: |
+          set -e
+          mkdir -p screenshots
+          APP_PATH="$(find build/ios/iphonesimulator -maxdepth 1 -name '*.app' | head -n1)"
+          BUNDLE_ID="com.sukashiform.sukashiForm"
+          echo "App path: $APP_PATH"
+
+          echo "=== 利用可能なシミュレータ一覧(デバッグ用) ==="
+          xcrun simctl list devices available
+
+          # 指定した名前の「既存の」シミュレータを検索し、UDID(識別子)を返す。
+          # Codemagic の Mac にはあらかじめ主要な機種のシミュレータが用意されている。
+          find_udid() {
+            xcrun simctl list devices available \
+              | grep -F "$1 (" \
+              | head -n1 \
+              | grep -oE '[0-9A-F]{8}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{12}'
+          }
+
+          # 候補名を順に試し、Xcodeのバージョンで名前が変わっていても対応できるようにする。
+          capture_for() {
+            local label="$1"; shift
+            local udid=""
+            local name=""
+            for candidate in "$@"; do
+              udid="$(find_udid "$candidate")"
+              if [ -n "$udid" ]; then
+                name="$candidate"
+                break
+              fi
+            done
+            if [ -z "$udid" ]; then
+              echo "[$label] 一致するシミュレータが見つかりません(候補: $*)"
+              return 1
+            fi
+            echo "[$label] '$name' ($udid) を使用します"
+            xcrun simctl boot "$udid" || true
+            xcrun simctl bootstatus "$udid" -b
+            xcrun simctl install "$udid" "$APP_PATH"
+            xcrun simctl launch "$udid" "$BUNDLE_ID"
+            sleep 6
+            xcrun simctl io "$udid" screenshot "screenshots/${label}.png"
+            xcrun simctl shutdown "$udid" || true
+          }
+
+          capture_for "ipad_13in_library" \
+            "iPad Pro 13-inch (M4)" \
+            "iPad Pro (12.9-inch) (6th generation)" \
+            "iPad Pro (12.9-inch) (5th generation)"
+
+          capture_for "iphone_65in_library" \
+            "iPhone 11 Pro Max" \
+            "iPhone Xs Max"
+
+          echo "=== 撮影結果 ==="
+          ls -la screenshots/
+    artifacts:
+      - screenshots/*.png
