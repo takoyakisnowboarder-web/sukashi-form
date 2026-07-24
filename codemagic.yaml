@@ -91,10 +91,14 @@ workflows:
       - name: シミュレータでスクリーンショットを撮影
         script: |
           set -e
-          mkdir -p screenshots
-          APP_PATH="$(find build/ios/iphonesimulator -maxdepth 1 -name '*.app' | head -n1)"
+          # simctl は相対パスの保存先を正しく解決できずに失敗するため、
+          # スクリーンショットの入出力はすべて絶対パスで扱う。
+          SHOTS="$PWD/screenshots"
+          mkdir -p "$SHOTS"
+          APP_PATH="$(find "$PWD/build/ios/iphonesimulator" -maxdepth 1 -name '*.app' | head -n1)"
           BUNDLE_ID="com.sukashiform.sukashiForm"
           echo "App path: $APP_PATH"
+          echo "Screenshot dir: $SHOTS"
 
           # シミュレータの表示名は Mac の言語設定で変わる(例:「iPad Pro 13インチ (M5)」)。
           # 名前で探すと言語設定次第で失敗するため、locale 非依存の
@@ -148,9 +152,9 @@ workflows:
             xcrun simctl launch "$udid" "$BUNDLE_ID"
             # Flutter のデバッグビルドは Dart VM の起動があるため初回描画が遅い
             sleep 20
-            xcrun simctl io "$udid" screenshot "screenshots/${label}_raw.png"
+            xcrun simctl io "$udid" screenshot --type=png "$SHOTS/${label}_raw.png"
             xcrun simctl shutdown "$udid" || true
-            echo "[$label] 撮影サイズ: $(sips -g pixelWidth -g pixelHeight "screenshots/${label}_raw.png" | tr '\n' ' ')"
+            echo "[$label] 撮影サイズ: $(sips -g pixelWidth -g pixelHeight "$SHOTS/${label}_raw.png" | tail -n2 | tr '\n' ' ')"
           }
 
           capture "ipad" "ipad13"
@@ -164,13 +168,13 @@ workflows:
           #   (iPhone 11 Pro Max などが削除済み)。そのため 6.9インチの撮影結果を
           #   6.5インチの規定画素数へ変換して用意する。縦横比の差は約0.4%で、
           #   見た目にはほぼ影響しない。
-          sips -z 2752 2064 screenshots/ipad_raw.png --out screenshots/ipad_13inch_2064x2752.png
-          sips -z 2868 1320 screenshots/iphone_raw.png --out screenshots/iphone_6.9inch_1320x2868.png
-          sips -z 2778 1284 screenshots/iphone_raw.png --out screenshots/iphone_6.5inch_1284x2778.png
-          rm -f screenshots/ipad_raw.png screenshots/iphone_raw.png
+          sips -z 2752 2064 "$SHOTS/ipad_raw.png"   --out "$SHOTS/ipad_13inch_2064x2752.png"
+          sips -z 2868 1320 "$SHOTS/iphone_raw.png" --out "$SHOTS/iphone_6.9inch_1320x2868.png"
+          sips -z 2778 1284 "$SHOTS/iphone_raw.png" --out "$SHOTS/iphone_6.5inch_1284x2778.png"
+          rm -f "$SHOTS/ipad_raw.png" "$SHOTS/iphone_raw.png"
 
           echo "=== 完成したスクリーンショット ==="
-          for f in screenshots/*.png; do
+          for f in "$SHOTS"/*.png; do
             echo "$f : $(sips -g pixelWidth -g pixelHeight "$f" | tail -n2 | tr '\n' ' ')"
           done
     artifacts:
