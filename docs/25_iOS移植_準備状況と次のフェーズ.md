@@ -116,6 +116,67 @@ Info.plist(表示名・カメラ/写真権限)・AppDelegate.swift のPigeon配�
   `AVAudioSession`の`outputVolume`をKVO監視する方式が候補だが制約あり、追加調査が要る
 - **ギャラリー自動保存**(`PHPhotoLibrary`によるMediaStore相当の実装)
 
+## 2026-07-24 追記: TestFlight で実機(iPhone)起動確認まで完了
+
+Codemagic の署名まわりで2エラーを潰し、TestFlight 経由で iPhone にインストール・起動に成功した。
+
+**署名で潰したエラー2件**:
+1. `app_store 配布タイプに一致するプロファイルが見つかりません`
+   - `environment.ios_signing` の自動ブロックはプロファイルを「取得」するだけで「作成」しなかった
+   - → 明示的に `app-store-connect fetch-signing-files --create` する方式へ変更
+2. `証明書の秘密鍵がないと署名証明書を保存できません`
+   - 証明書一覧は空だった。`--create` に証明書作成用の秘密鍵を渡していなかった
+   - → ビルド内で `openssl genrsa` で秘密鍵を生成し `--certificate-key` に渡す方式へ
+   - ⚠️ 現状は毎回新しい配布用証明書を作る。Apple は配布証明書を最大2つまでのため、
+     多数ビルドする段階になったら秘密鍵を環境変数に保存して再利用へ切り替える(codemagic.yaml に明記済み)
+
+**その他の設定**:
+- `codemagic.yaml` を追加(ワークフロー「iOS TestFlight」)。UI設定ではなくファイル方式に切り替え
+- App ID `com.sukashiform.sukashiForm` を Developer Portal に登録、App Store Connect に
+  アプリ「オフトレカイセキ」を作成
+- 暗号化輸出コンプライアンス: 手動で「該当なし」を回答 +
+  `ITSAppUsesNonExemptEncryption=false` を Info.plist に追加(次回以降は自動スキップ)
+
+**実機での検証結果(iPhone / TestFlight / リリースビルド)**:
+
+| 項目 | 結果 |
+|---|---|
+| アプリ起動・ライブラリ画面表示 | ✅ |
+| 撮影画面へ遷移・カメラ権限許可 | ✅ |
+| 撮影してライブラリにクリップが並ぶ | ✅ |
+| 画面遷移・クリップ長押しメニュー | ✅(メモ編集・削除が表示) |
+| **「比較範囲を選択」が長押しメニューに出ない** | ⏳ **想定通り**。下記参照 |
+
+**「比較範囲を選択」が出ない理由(バグではない)**:
+- `library_screen.dart` は `if (!clip.isBroken)` の時だけ「比較範囲を選択」を表示する
+- iOSで録画したクリップは、`video_metadata_service` が録画後に `probe()` を呼ぶが、
+  iOS の probe はスタブ(必ず失敗)なので `isBroken: true` になる
+- → 全クリップが破損扱いになり「比較範囲を選択」が隠れる。ライブラリのカードにも
+  「この動画は読み込めません」の破損表示が出る
+- **これはネイティブ未実装の必然的な結果**であり、次フェーズの probe 実装で解消する
+
+**結論: iOS版の「殻」(Dartレイヤー + ビルド/署名/配信パイプライン)は完全に動作確認済み。**
+残るはネイティブ(Swift)実装のみ。
+
+## 次フェーズ: iOS ネイティブ実装(AVAssetImageGenerator)
+
+Android版の `FrameExtractorApiImpl.kt`(494行, Kotlin)を Swift に移植する。
+Android のフェーズ3a/3b と同じ分割で進めるのが安全:
+
+- **iOSフェーズ1(3a相当)**: `probe`(尺・破損検出)+ `generateThumbnail`(サムネイル)
+  - これだけで「クリップが破損扱いされなくなる」「サムネイルが出る」「比較範囲を選択が出る」
+    という目に見える成果が出る
+  - `AVAsset` / `AVAssetImageGenerator` / `AVAssetTrack`(尺・回転)を使う
+- **iOSフェーズ2(3b相当)**: `extractFrames`(範囲指定でのフレーム一括展開)+ 進捗通知 + キャンセル
+  - `AVAssetImageGenerator.generateCGImagesAsynchronously` でバッチ生成
+  - 長辺1280pxのJPEGに変換して保存(Android実装と同じ出力仕様)
+- **iOSフェーズ3(任意・後回し)**: ギャラリー自動保存(`PHPhotoLibrary`)、
+  音量キー録画(iOSは標準APIがなく要調査)
+
+🔴 **重要**: Codex/実装者が新しい Swift ファイルを追加したら、
+`project.pbxproj` への手動登録を忘れないこと(Windows/Xcode無し環境の制約。
+ファイルを置くだけではXcodeのビルド対象にならない。今回これで2回ハマった)。
+
 ## 更新履歴
 
 - 2026-07-24: 初版作成。アプリ改名の完了、iOSプラットフォーム生成、Info.plist/AppDelegate.swiftの
@@ -123,3 +184,7 @@ Info.plist(表示名・カメラ/写真権限)・AppDelegate.swift のPigeon配�
 - 2026-07-24: Apple Developer Program 加入、Codemagic + GitHub でビルドパイプライン確立。
   pbxproj未登録・Pigeon setUp のクラス名の2エラーを潰し、**iOSビルド成功を実証**。
   「flutter create は既存ネイティブファイルをpbxprojに登録しない」学びを記録 (claude)
+- 2026-07-24: Codemagic の署名2エラー(プロファイル未作成・秘密鍵欠如)を潰し、
+  TestFlight 経由で **iPhone 実機にインストール・起動成功**。撮影・ライブラリ・画面遷移まで動作確認。
+  「比較範囲を選択」非表示はprobeスタブによるisBroken判定=想定通りと確認。
+  iOS版の殻は完全動作。次はネイティブ(AVAssetImageGenerator)実装フェーズ (claude)
