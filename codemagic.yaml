@@ -56,5 +56,11 @@ workflows:
     publishing:
       app_store_connect:
         auth: integration
-        # TestFlight に自動提出(内部テスターはBeta審査なしで即インストール可)。
-        submit_to_testflight: true
+        # アップロードのみ行う。内部テスター(自分)はBeta審査なしで即インストールできる。
+        #
+        # submit_to_testflight: true にすると「外部テスター向けベータ審査」への提出まで行うが、
+        # それには App Store Connect 側でテスト情報の入力が必須(フィードバック用メール、
+        # ベータ版アプリレビュー情報の氏名・電話番号・メール)。未入力だとこのステップで失敗する。
+        # 外部テスター(最大10,000人)に配りたくなったら、下記URLでテスト情報を埋めてから true にする:
+        #   https://appstoreconnect.apple.com/apps/6794272197/testflight/test-info
+        submit_to_testflight: false
