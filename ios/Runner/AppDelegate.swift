@@ -13,9 +13,9 @@ import UIKit
   func didInitializeImplicitFlutterEngine(_ engineBridge: FlutterImplicitEngineBridge) {
     GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
     // Android の MainActivity#configureFlutterEngine と同じ配線。
-    // 実体は FrameExtractorApiStub(全メソッド unimplemented)。
-    // AVAssetImageGenerator による実装は Codex に Mac/Xcode 環境が揃ってから着手する。
+    // FrameExtractorApiImpl は probe / generateThumbnail を実装済み(フェーズ1)。
+    // extractFrames などはフェーズ2以降で実装する。
     let messenger = engineBridge.applicationRegistrar.messenger()
-    FrameExtractorApiSetup.setUp(binaryMessenger: messenger, api: FrameExtractorApiStub())
+    FrameExtractorApiSetup.setUp(binaryMessenger: messenger, api: FrameExtractorApiImpl())
   }
 }
