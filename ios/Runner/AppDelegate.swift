@@ -13,9 +13,14 @@ import UIKit
   func didInitializeImplicitFlutterEngine(_ engineBridge: FlutterImplicitEngineBridge) {
     GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
     // Android の MainActivity#configureFlutterEngine と同じ配線。
-    // FrameExtractorApiImpl は probe / generateThumbnail を実装済み(フェーズ1)。
-    // extractFrames などはフェーズ2以降で実装する。
+    // FrameExtractorApiImpl は probe / generateThumbnail / extractFrames を実装済み。
+    // 展開の進捗は FrameExtractionProgressApi 経由で Dart へ返す。
     let messenger = engineBridge.applicationRegistrar.messenger()
-    FrameExtractorApiSetup.setUp(binaryMessenger: messenger, api: FrameExtractorApiImpl())
+    FrameExtractorApiSetup.setUp(
+      binaryMessenger: messenger,
+      api: FrameExtractorApiImpl(
+        progressApi: FrameExtractionProgressApi(binaryMessenger: messenger)
+      )
+    )
   }
 }
