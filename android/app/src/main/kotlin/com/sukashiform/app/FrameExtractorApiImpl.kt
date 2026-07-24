@@ -103,7 +103,7 @@ class FrameExtractorApiImpl(
             put(MediaStore.Video.Media.MIME_TYPE, "video/mp4")
             put(
                 MediaStore.Video.Media.RELATIVE_PATH,
-                "${Environment.DIRECTORY_MOVIES}/スカシフォーム",
+                "${Environment.DIRECTORY_MOVIES}/オフトレカイセキ",
             )
             put(MediaStore.Video.Media.IS_PENDING, 1)
         }

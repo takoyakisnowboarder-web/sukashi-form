@@ -592,7 +592,7 @@ class _CameraUnavailableView extends StatelessWidget {
               if (permissionDenied)
                 const Text(
                   '権限を拒否した場合は、端末の「設定」→「アプリ」→'
-                  '「スカシフォーム」→「権限」でカメラを許可し、戻って再試行してください。',
+                  '「オフトレカイセキ」→「権限」でカメラを許可し、戻って再試行してください。',
                   textAlign: TextAlign.center,
                 ),
               const SizedBox(height: 20),

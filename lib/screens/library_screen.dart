@@ -41,7 +41,7 @@ class LibraryScreen extends ConsumerWidget {
     final selectedIds = ref.watch(clipSelectionProvider);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('スカシフォーム')),
+      appBar: AppBar(title: const Text('オフトレカイセキ')),
       body: clips.when(
         data: (items) => items.isEmpty
             ? const _EmptyLibrary()

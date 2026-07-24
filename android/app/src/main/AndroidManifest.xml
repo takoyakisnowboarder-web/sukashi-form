@@ -15,7 +15,7 @@
         tools:node="remove" />
     <uses-feature android:name="android.hardware.camera.any" android:required="false" />
     <application
-        android:label="スカシフォーム"
+        android:label="オフトレカイセキ"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity
