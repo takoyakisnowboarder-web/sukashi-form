@@ -238,9 +238,18 @@ iOS 固有の対応:
 
 ### 🔴 リリース前に必須
 
-- **アプリアイコンが Flutter のデフォルトのまま**。`flutter create` が生成した既定アイコンが
-  `ios/Runner/Assets.xcassets/AppIcon.appiconset/` に入っている。
-  Android 版のアイコン(濃紺背景+シアン/コーラルの人型シルエット)に合わせる必要がある
+- ~~アプリアイコンが Flutter のデフォルトのまま~~ ✅ **2026-07-24 対応済み**。
+  `docs/store_assets/sukashi_form_app_icon_512.png`(濃紺背景に重なるカード+照準)から
+  全15サイズを生成し `ios/Runner/Assets.xcassets/AppIcon.appiconset/` へ配置。
+  外周1pxの半透明を紺(#030D2D)で埋めて**完全不透明化**した(App Store はアルファ付き
+  アイコンを拒否するため)。不透明化済みマスターは `assets/branding/ios_app_icon_master_512.png`。
+  1024pxスロットのみ512pxからの拡大(このデザインの高解像度原本が存在しないため。
+  平面的な意匠なので実用上問題なし)。
+  - ⚠️ **Android と iOS でアプリアイコンのデザインが違う状態**。
+    Android のランチャーアイコンは「走る2人の人型シルエット」
+    (高解像度原本 `assets/branding/app_icon_master.png` = 1254px)、
+    iOS は上記の「カード+照準」。オーナーの選択によるものだが、
+    ブランド統一の観点では将来どちらかに揃えることを検討してもよい
 - App Store Connect のストア掲載情報(説明文・スクリーンショット・年齢制限・
   プライバシーポリシーURL・カテゴリ)。TestFlight の内部テストには不要だが、公開審査には必須
 - 外部テスターへ配る場合はテスト情報(フィードバック用メール・レビュー連絡先)の入力と、
