@@ -6,11 +6,13 @@
 # 完了すると署名付き IPA が TestFlight に自動アップロードされ、
 # iPhone/iPad の TestFlight アプリで受け取れる。
 #
-# 署名は environment.ios_signing の自動ブロックではなく、
-# app-store-connect CLI で証明書とプロファイルを明示的に「作成」する方式を採る
-# (--create)。これによりプロファイル未存在でも自動生成される。
+# 署名方式: app-store-connect CLI で配布用証明書と App Store プロファイルを
+# 明示的に「作成」する(--create)。証明書作成には秘密鍵が必要なので、
+# ビルド内で openssl で生成して --certificate-key に渡す。
 # ※ 連携している API キーのロールは「App Manager」または「Admin」が必要。
-#    権限不足だと fetch-signing-files が権限エラーで失敗する。
+# ※ 注意: このビルドは毎回新しい配布用証明書を作成する。Apple は配布用証明書を
+#    最大2つまでしか持てないため、何度もビルドする段階になったら
+#    秘密鍵を Codemagic の環境変数に保存して再利用する方式へ切り替えること。
 
 workflows:
   ios-testflight:
@@ -26,15 +28,19 @@ workflows:
     scripts:
       - name: Flutter パッケージ取得
         script: flutter pub get
+      - name: キーチェーン初期化
+        script: keychain initialize
       - name: 署名ファイルを取得・作成
         script: |
+          # 証明書作成に使う秘密鍵を生成し、それを使って
+          # 配布用証明書と App Store プロファイルを作成する。
+          openssl genrsa -out /tmp/cert_key.pem 2048
           app-store-connect fetch-signing-files "com.sukashiform.sukashiForm" \
             --type IOS_APP_STORE \
+            --certificate-key=@file:/tmp/cert_key.pem \
             --create
       - name: キーチェーンに証明書を登録
-        script: |
-          keychain initialize
-          keychain add-certificates
+        script: keychain add-certificates
       - name: Xcode にプロファイルを適用
         script: xcode-project use-profiles
       - name: IPA ビルド
