@@ -96,54 +96,82 @@ workflows:
           BUNDLE_ID="com.sukashiform.sukashiForm"
           echo "App path: $APP_PATH"
 
-          echo "=== 利用可能なシミュレータ一覧(デバッグ用) ==="
-          xcrun simctl list devices available
+          # シミュレータの表示名は Mac の言語設定で変わる(例:「iPad Pro 13インチ (M5)」)。
+          # 名前で探すと言語設定次第で失敗するため、locale 非依存の
+          # deviceTypeIdentifier(例: ...SimDeviceType.iPad-Pro-13-inch-M5)で選ぶ。
+          cat > /tmp/pick_device.py <<'PYEOF'
+          import json
+          import subprocess
+          import sys
 
-          # 指定した名前の「既存の」シミュレータを検索し、UDID(識別子)を返す。
-          # Codemagic の Mac にはあらかじめ主要な機種のシミュレータが用意されている。
-          find_udid() {
-            xcrun simctl list devices available \
-              | grep -F "$1 (" \
-              | head -n1 \
-              | grep -oE '[0-9A-F]{8}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{12}'
-          }
+          want = sys.argv[1]
+          data = json.loads(
+              subprocess.check_output(
+                  ["xcrun", "simctl", "list", "devices", "available", "--json"]
+              )
+          )
 
-          # 候補名を順に試し、Xcodeのバージョンで名前が変わっていても対応できるようにする。
-          capture_for() {
-            local label="$1"; shift
-            local udid=""
-            local name=""
-            for candidate in "$@"; do
-              udid="$(find_udid "$candidate")"
-              if [ -n "$udid" ]; then
-                name="$candidate"
-                break
-              fi
-            done
+          def matches(ident):
+              if want == "ipad13":
+                  return "iPad" in ident and "13-inch" in ident
+              if want == "iphonemax":
+                  return "iPhone" in ident and "Pro-Max" in ident
+              return False
+
+          # 同じ機種が複数の iOS ランタイムに存在するので、最後に見つかったもの
+          # (=より新しいランタイム側)を採用する。
+          chosen = ""
+          for runtime, devices in data["devices"].items():
+              if "iOS" not in runtime:
+                  continue
+              for device in devices:
+                  if matches(device.get("deviceTypeIdentifier", "")):
+                      chosen = device["udid"]
+          print(chosen)
+          PYEOF
+
+          capture() {
+            label="$1"
+            kind="$2"
+            udid="$(python3 /tmp/pick_device.py "$kind")"
             if [ -z "$udid" ]; then
-              echo "[$label] 一致するシミュレータが見つかりません(候補: $*)"
+              echo "[$label] 条件 '$kind' に一致するシミュレータが見つかりません"
+              echo "--- 利用可能なデバイス識別子 ---"
+              xcrun simctl list devices available --json \
+                | python3 -c "import json,sys;[print(d['deviceTypeIdentifier']) for r,ds in json.load(sys.stdin)['devices'].items() for d in ds]"
               return 1
             fi
-            echo "[$label] '$name' ($udid) を使用します"
+            echo "[$label] シミュレータ $udid を使用します"
             xcrun simctl boot "$udid" || true
             xcrun simctl bootstatus "$udid" -b
             xcrun simctl install "$udid" "$APP_PATH"
             xcrun simctl launch "$udid" "$BUNDLE_ID"
-            sleep 6
-            xcrun simctl io "$udid" screenshot "screenshots/${label}.png"
+            # Flutter のデバッグビルドは Dart VM の起動があるため初回描画が遅い
+            sleep 20
+            xcrun simctl io "$udid" screenshot "screenshots/${label}_raw.png"
             xcrun simctl shutdown "$udid" || true
+            echo "[$label] 撮影サイズ: $(sips -g pixelWidth -g pixelHeight "screenshots/${label}_raw.png" | tr '\n' ' ')"
           }
 
-          capture_for "ipad_13in_library" \
-            "iPad Pro 13-inch (M4)" \
-            "iPad Pro (12.9-inch) (6th generation)" \
-            "iPad Pro (12.9-inch) (5th generation)"
+          capture "ipad" "ipad13"
+          capture "iphone" "iphonemax"
 
-          capture_for "iphone_65in_library" \
-            "iPhone 11 Pro Max" \
-            "iPhone Xs Max"
+          # App Store Connect が受け付ける画素数へ揃える(sips -z は 高さ 幅 の順)。
+          #   iPad 13インチ : 2064 x 2752
+          #   iPhone 6.9インチ: 1320 x 2868(撮影したそのままのサイズ)
+          #   iPhone 6.5インチ: 1284 x 2778
+          # ※ 6.5インチ相当の実機シミュレータは Xcode 26 世代に存在しない
+          #   (iPhone 11 Pro Max などが削除済み)。そのため 6.9インチの撮影結果を
+          #   6.5インチの規定画素数へ変換して用意する。縦横比の差は約0.4%で、
+          #   見た目にはほぼ影響しない。
+          sips -z 2752 2064 screenshots/ipad_raw.png --out screenshots/ipad_13inch_2064x2752.png
+          sips -z 2868 1320 screenshots/iphone_raw.png --out screenshots/iphone_6.9inch_1320x2868.png
+          sips -z 2778 1284 screenshots/iphone_raw.png --out screenshots/iphone_6.5inch_1284x2778.png
+          rm -f screenshots/ipad_raw.png screenshots/iphone_raw.png
 
-          echo "=== 撮影結果 ==="
-          ls -la screenshots/
+          echo "=== 完成したスクリーンショット ==="
+          for f in screenshots/*.png; do
+            echo "$f : $(sips -g pixelWidth -g pixelHeight "$f" | tail -n2 | tr '\n' ' ')"
+          done
     artifacts:
       - screenshots/*.png
