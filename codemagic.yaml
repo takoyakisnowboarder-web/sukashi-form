@@ -5,6 +5,12 @@
 # 使い方: Codemagic のビルド開始時にワークフロー「iOS TestFlight」を選ぶ。
 # 完了すると署名付き IPA が TestFlight に自動アップロードされ、
 # iPhone/iPad の TestFlight アプリで受け取れる。
+#
+# 署名は environment.ios_signing の自動ブロックではなく、
+# app-store-connect CLI で証明書とプロファイルを明示的に「作成」する方式を採る
+# (--create)。これによりプロファイル未存在でも自動生成される。
+# ※ 連携している API キーのロールは「App Manager」または「Admin」が必要。
+#    権限不足だと fetch-signing-files が権限エラーで失敗する。
 
 workflows:
   ios-testflight:
@@ -15,16 +21,22 @@ workflows:
       # ↓ Codemagic に登録した App Store Connect API キーの「キー名」
       app_store_connect: たこ焼きスノーボーダー
     environment:
-      ios_signing:
-        # App Store / TestFlight 配信用の自動署名。
-        # 証明書とプロビジョニングプロファイルは API キー経由で自動生成される。
-        distribution_type: app_store
-        bundle_identifier: com.sukashiform.sukashiForm
       flutter: stable
       xcode: latest
     scripts:
       - name: Flutter パッケージ取得
         script: flutter pub get
+      - name: 署名ファイルを取得・作成
+        script: |
+          app-store-connect fetch-signing-files "com.sukashiform.sukashiForm" \
+            --type IOS_APP_STORE \
+            --create
+      - name: キーチェーンに証明書を登録
+        script: |
+          keychain initialize
+          keychain add-certificates
+      - name: Xcode にプロファイルを適用
+        script: xcode-project use-profiles
       - name: IPA ビルド
         script: |
           # ビルド番号を Codemagic のビルド連番にして、
