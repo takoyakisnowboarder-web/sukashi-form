@@ -158,7 +158,95 @@ Codemagic の署名まわりで2エラーを潰し、TestFlight 経由で iPhone
 **結論: iOS版の「殻」(Dartレイヤー + ビルド/署名/配信パイプライン)は完全に動作確認済み。**
 残るはネイティブ(Swift)実装のみ。
 
-## 次フェーズ: iOS ネイティブ実装(AVAssetImageGenerator)
+## 2026-07-24 追記: iOS ネイティブ実装フェーズ1・2 完了(核心機能が iOS で動作)
+
+Claude が直接 Swift を実装(Codex への指示書方式ではなく直接実装を選択)。
+
+### フェーズ1: probe + generateThumbnail
+
+`FrameExtractorApiStub.swift` を `FrameExtractorApiImpl.swift` にリネームして実装
+(pbxproj は path 文字列のみ変更し、オブジェクトIDは維持=低リスク)。
+
+- `probe`: `AVURLAsset` で尺・寸法・回転を取得。ファイル不在/空/尺ゼロを
+  Android と同じ errorReason(`file_not_found`/`empty_file`/`invalid_duration`)で返す
+- `generateThumbnail`: `AVAssetImageGenerator` + `appliesPreferredTrackTransform=true`
+  (縦動画が倒れない)。長辺512pxへ縮小のみ(拡大しない)、JPEG品質85、アトミック書き込み
+
+**実機検証(iPhone / TestFlight / リリースビルド): 全項目合格**
+
+| 項目 | 結果 |
+|---|---|
+| サムネイル表示 | ✅ 実映像が表示される |
+| 尺(秒数)表示 | ✅ 表示される |
+| 破損表示「この動画は読み込めません」の解消 | ✅ 消えた |
+| 長押しメニューに「比較範囲を選択」 | ✅ 出る |
+
+### フェーズ2: extractFrames(+進捗・キャンセル)
+
+Android のアルゴリズムをそのまま移植:
+10秒上限 / プレビュー要求(≤24枚・≤240px)のみ上限を回避 / 等間隔フレーム選択 /
+`isComplete` の判定式まで同一。
+
+iOS 固有の対応:
+- iOS には `METADATA_KEY_VIDEO_FRAME_COUNT` 相当が無いため、
+  **公称フレームレート×尺**で総フレーム数を見積もる
+- **フレーム i の時間帯の中央を、許容誤差ゼロで要求**(丸め誤差で隣のフレームを掴まない)。
+  コマ送り精度がこのアプリの売りなので厳密性を優先
+- `maximumSize` でデコード時点から縮小し、メモリを節約
+- JPEG はアトミック書き込み。**1枚でも欠けたら全体を失敗扱い**
+  (Dart 側が frame_000000..N-1 の全存在を前提にキャッシュを確定するため)
+- 進捗は8枚ごとに間引き、**メインスレッドから** Dart へ通知
+- キャンセルは NSLock 保護トークン + `cancelAllCGImageGeneration()`
+
+**実機検証: 全項目合格**
+
+| 項目 | 結果 |
+|---|---|
+| 展開の進捗表示 | ✅ 進む |
+| **2本の映像が半透明で重なる(核心価値)** | ✅ **重なる** |
+| コマ送り ◀▶ が1フレームずつ | ✅ 動く |
+| 透過スライダー / 分割(上下・左右)/ 位置合わせ | ✅ 動く |
+| 比較範囲選択のプレビュー帯(24枚) | ✅ 出る |
+| **展開時間** | ✅ **5秒以内(Android の約7秒より速い)** |
+
+展開が十分速いため、当初検討していた `AVAssetReader` による逐次読み出しへの
+作り直しは**不要**と判断した。
+
+### 署名で追加で潰した問題(証明書の上限)
+
+ビルドのたびに秘密鍵を生成していたため、毎回新しい配布証明書が作られ、
+**Apple の上限(配布証明書は最大2つ)に達して 409 で失敗**した。
+
+対策: 固定の秘密鍵を Codemagic の環境変数 `CERTIFICATE_PRIVATE_KEY`
+(グループ `ios_signing`、secure)に保存し、`--certificate-key=@env:` で参照する方式へ変更。
+既存の使えない配布証明書2つ(秘密鍵が失われている)はオーナーが取り消した。
+これにより2回目以降は同じ証明書が再利用される。
+
+> **学び**: CI で証明書を自動作成する場合、秘密鍵は必ず固定・保管する。
+> 使い捨ての鍵で作ると、証明書だけが増えて上限に達し、しかもその証明書は誰も使えない。
+
+## 残作業(iOS)
+
+### ネイティブ(フェーズ3・任意)
+
+- `saveVideoToGallery`(`PHPhotoLibrary`)= ギャラリー自動保存。
+  現状 `isGallerySaveSupported()` が false を返すため、**iOS では設定項目自体が出ない**
+  (機能が無いのに設定だけ出る、という不整合は起きていない)。
+  Info.plist の `NSPhotoLibraryAddUsageDescription` は実装に備えて追加済み
+- 音量キー録画。iOS に `dispatchKeyEvent` 相当が無く、`AVAudioSession.outputVolume` の
+  KVO 監視が候補だが制約が多い。**移植ではなく追加調査が必要**
+
+### 🔴 リリース前に必須
+
+- **アプリアイコンが Flutter のデフォルトのまま**。`flutter create` が生成した既定アイコンが
+  `ios/Runner/Assets.xcassets/AppIcon.appiconset/` に入っている。
+  Android 版のアイコン(濃紺背景+シアン/コーラルの人型シルエット)に合わせる必要がある
+- App Store Connect のストア掲載情報(説明文・スクリーンショット・年齢制限・
+  プライバシーポリシーURL・カテゴリ)。TestFlight の内部テストには不要だが、公開審査には必須
+- 外部テスターへ配る場合はテスト情報(フィードバック用メール・レビュー連絡先)の入力と、
+  `codemagic.yaml` の `submit_to_testflight: true` への切り替え
+
+## 参考: 当初の計画(フェーズ1・2は上記の通り完了済み)
 
 Android版の `FrameExtractorApiImpl.kt`(494行, Kotlin)を Swift に移植する。
 Android のフェーズ3a/3b と同じ分割で進めるのが安全:
@@ -188,3 +276,9 @@ Android のフェーズ3a/3b と同じ分割で進めるのが安全:
   TestFlight 経由で **iPhone 実機にインストール・起動成功**。撮影・ライブラリ・画面遷移まで動作確認。
   「比較範囲を選択」非表示はprobeスタブによるisBroken判定=想定通りと確認。
   iOS版の殻は完全動作。次はネイティブ(AVAssetImageGenerator)実装フェーズ (claude)
+- 2026-07-24: **iOS ネイティブ実装フェーズ1・2をClaudeが直接実装し、実機で全項目合格**。
+  probe/generateThumbnail/extractFrames を AVFoundation で実装し、
+  **2本の映像が半透明で重なる=アプリの核心価値が iOS で動作**。展開は5秒以内で
+  Android(約7秒)より速く、AVAssetReader への作り直しは不要と判断。
+  署名は証明書上限(409)に当たったため、固定秘密鍵を環境変数に保存する方式へ変更。
+  残るはギャラリー保存・音量キー(任意)と、**iOSアプリアイコンがデフォルトのまま**な点 (claude)
