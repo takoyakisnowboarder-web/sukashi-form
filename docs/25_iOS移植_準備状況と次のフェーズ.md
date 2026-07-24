@@ -60,21 +60,66 @@ Mac/クラウドビルド環境の選定を待たずに**iOS移植の下準備**
 - 実機・シミュレータでの起動確認、`flutter analyze`のiOS向けビルドエラー検出
 - IPAビルド・TestFlight配布・App Store審査提出
 
+## 2026-07-24 追記: Codemagic で iOS ビルドが通ることを実証
+
+**環境決定**: オーナーが Apple Developer Program(年99ドル)に加入。
+Mac は購入せず、**Codemagic(クラウドビルド)+ 手持ちの iPhone/iPad** で進める方針に確定。
+GitHub リポジトリ `github.com/takoyakisnowboarder-web/sukashi-form` を新規作成し、
+Codemagic と連携。App Store Connect API キー(.p8)で署名設定済み。
+
+**ビルド成功までに潰したエラー2件**(いずれも「Swift未検証」として警告していた箇所):
+
+1. `Cannot find 'FrameExtractorApi'/'FrameExtractorApiStub' in scope`
+   - 原因: `flutter create` が `project.pbxproj` を作り直した際、それ以前から存在した
+     Pigeonの2ファイル(`FrameExtractorApi.g.swift`・`FrameExtractorApiStub.swift`)が
+     ビルド対象(PBXFileReference/PBXBuildFile/PBXGroup/PBXSourcesBuildPhase)に
+     登録されなかった。Xcodeがこの2ファイルをコンパイルしていなかった
+   - 修正: Xcodeが無いので `project.pbxproj` を手動編集し、AppDelegate.swift と同じ扱いで
+     Runnerターゲットの4セクションに2ファイルを登録(コミット `2cede71`)
+   - ⚠️ **今後 Pigeon で新しいネイティブファイルを追加したら、同様に手動登録が要る**
+     (Windows/Xcode無しの制約。ファイルを置くだけではXcodeのビルド対象にならない)
+
+2. `Type 'any FrameExtractorApi' has no member 'setUp'`
+   - 原因: Pigeon v27 では `setUp` 静的メソッドがプロトコルではなく別クラス
+     `FrameExtractorApiSetup` に置かれる(旧バージョンと異なる)
+   - 修正: AppDelegate.swift を `FrameExtractorApiSetup.setUp(...)` に変更(コミット `6c1dbe4`)
+
+**結果**: `flutter build ios --debug --no-codesign` が Codemagic(macOS M2)で成功。
+Info.plist(表示名・カメラ/写真権限)・AppDelegate.swift のPigeon配線が実機ビルドで通ることを実証。
+**これで「Windows から iOS をビルドできる」パイプラインが確立した。**
+
+> **重要な学び**: `flutter create` は既存のネイティブ手書きファイルを Xcode プロジェクトに
+> 登録しない。Android(Gradle)はディレクトリを走査するので気づかないが、iOS(Xcode)は
+> pbxproj への明示登録が必須。Windows環境ではこれを手作業でやる必要がある。
+
 ## 次のアクション(優先順)
 
-1. (オーナー判断) **Mac環境の確保方法を決める**(クラウドビルド/リモートMacレンタル/実機購入)。
-   `docs`の企画設計書に記載の通り、ネイティブSwiftコードを含むため
-   Xcodeデバッガが使える環境が実質必須(クラウドビルドのみでは実機クラッシュの原因調査が困難)
-2. 環境が決まり次第、**まず`flutter build ios`(または`flutter run`)が通ることだけを確認**する
-   小さなフェーズを切る。今回の未検証差分(Info.plist・AppDelegate.swift)はここで最初に検証される
-3. Apple Developer Program(年99ドル)への加入(iOS実機テスト・TestFlight配布に必要)
+1. ✅ ~~Apple Developer Program 加入~~(完了)
+2. ✅ ~~Codemagic + GitHub のビルドパイプライン確立、iOSビルド成功~~(完了)
+3. **iPhone/iPad へインストールして起動確認**(次はここ)
+   - 現状はスタブ実装なので、**撮影・ライブラリ・比較画面のUIは表示されるが、
+     フレーム展開(サムネイル生成・比較準備)はネイティブ未実装のため動かない**
+   - まず「アプリが起動して画面遷移できる」ことだけ確認する
+   - 署名付きビルド(`--no-codesign`を外す)で iPhone に入れる。TestFlight 経由が確実
 4. ネイティブ実装(`AVAssetImageGenerator`)のフェーズ指示書をClaudeが作成し、Codexが実装
    (Android版フェーズ3a/3bと同じ分割: 配線+probe+サムネイル → extractFrames本体)
+   - 🔴 **Codexが新規Swiftファイルを追加したら、pbxproj登録も忘れずに**(上記の学び)
 5. 音量キー録画の実現可否を先に技術検証してから、フェーズとして切るか判断する
-6. Android版のPlay Store審査結果が出た後、**「iOS着手条件」(企画設計書の未決事項)を
-   実際の売上と照らして再確認**しておくとよい
+6. ギャラリー自動保存(`PHPhotoLibrary`)の実装
+
+## 今はできないこと(引き続きネイティブ実装が必要)
+
+- **`AVAssetImageGenerator`によるネイティブ実装**(`probe`/`generateThumbnail`/`extractFrames`/
+  `cancelExtraction`)。Android版のKotlin実装(`FrameExtractorApiImpl.kt`, 494行)を移植する規模。
+  **これが無いとフレーム展開=アプリの中核機能が動かない**
+- **音量キー録画のiOS版実装**。Androidの`dispatchKeyEvent`に相当するAPIがiOSには存在しない。
+  `AVAudioSession`の`outputVolume`をKVO監視する方式が候補だが制約あり、追加調査が要る
+- **ギャラリー自動保存**(`PHPhotoLibrary`によるMediaStore相当の実装)
 
 ## 更新履歴
 
 - 2026-07-24: 初版作成。アプリ改名の完了、iOSプラットフォーム生成、Info.plist/AppDelegate.swiftの
   下準備をWindows環境で実施。ネイティブ実装は次フェーズ(Mac確保後)へ切り出した (claude)
+- 2026-07-24: Apple Developer Program 加入、Codemagic + GitHub でビルドパイプライン確立。
+  pbxproj未登録・Pigeon setUp のクラス名の2エラーを潰し、**iOSビルド成功を実証**。
+  「flutter create は既存ネイティブファイルをpbxprojに登録しない」学びを記録 (claude)
