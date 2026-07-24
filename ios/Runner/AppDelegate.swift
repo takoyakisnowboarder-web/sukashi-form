@@ -16,6 +16,6 @@ import UIKit
     // 実体は FrameExtractorApiStub(全メソッド unimplemented)。
     // AVAssetImageGenerator による実装は Codex に Mac/Xcode 環境が揃ってから着手する。
     let messenger = engineBridge.applicationRegistrar.messenger()
-    FrameExtractorApi.setUp(binaryMessenger: messenger, api: FrameExtractorApiStub())
+    FrameExtractorApiSetup.setUp(binaryMessenger: messenger, api: FrameExtractorApiStub())
   }
 }
