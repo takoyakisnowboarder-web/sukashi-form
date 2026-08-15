@@ -12,8 +12,12 @@ import '../data/frame_cache_service.dart';
 import '../models/app_settings.dart';
 import '../models/clip.dart';
 import '../models/comparison_pair.dart';
+import '../pose/pose_analysis_service.dart';
+import '../pose/pose_model.dart';
+import '../pose/pose_skeleton_painter.dart';
 import '../providers/clip_providers.dart';
 import '../providers/frame_extraction_providers.dart';
+import '../providers/pose_providers.dart';
 import '../widgets/comparison_frame_view.dart';
 
 final comparisonExtractionStarterProvider =
@@ -60,6 +64,11 @@ class _CompareScreenState extends ConsumerState<CompareScreen>
   String? _alignmentTargetClipId;
   AlignmentTransform? _gestureStartTransform;
   Offset? _gestureStartFocalPoint;
+  bool _poseEnabled = false;
+  bool _poseAnalyzing = false;
+  int _poseSession = 0;
+  String _poseProgressLabel = '';
+  final Map<String, PoseFrame> _poses = <String, PoseFrame>{};
 
   @override
   void initState() {
@@ -69,6 +78,7 @@ class _CompareScreenState extends ConsumerState<CompareScreen>
 
   @override
   void dispose() {
+    _poseSession += 1;
     unawaited(_progressSubscription?.cancel());
     unawaited(_activeSession?.cancel());
     _ticker.dispose();
@@ -212,6 +222,103 @@ class _CompareScreenState extends ConsumerState<CompareScreen>
       return 'フレームを準備できませんでした（${error.reason}）。';
     }
     return '比較画面を準備できませんでした。';
+  }
+
+  static const _poseColorA = Color(0xFF38BDF8);
+  static const _poseColorB = Color(0xFFFBBF24);
+
+  PoseFrame? _poseFor(String path) {
+    if (!_poseEnabled) {
+      return null;
+    }
+    return _poses[path];
+  }
+
+  Future<void> _setPoseEnabled(
+    bool enabled,
+    ComparisonController controller,
+  ) async {
+    if (!enabled) {
+      _poseSession += 1;
+      setState(() {
+        _poseEnabled = false;
+        _poseAnalyzing = false;
+        _poseProgressLabel = '';
+      });
+      return;
+    }
+    final detector = ref.read(poseDetectorClientProvider);
+    if (!detector.isSupported) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('この端末では骨格解析を実行できません。')));
+      }
+      return;
+    }
+    setState(() => _poseEnabled = true);
+    await _analyzePoses(controller);
+  }
+
+  Future<void> _analyzePoses(ComparisonController controller) async {
+    final sessionId = ++_poseSession;
+    setState(() {
+      _poseAnalyzing = true;
+      _poseProgressLabel = '骨格解析を準備しています…';
+    });
+    final service = ref.read(poseAnalysisServiceProvider);
+    try {
+      var clipIndex = 0;
+      for (final track in <ComparisonTrack>[
+        controller.trackA,
+        controller.trackB,
+      ]) {
+        if (!mounted || sessionId != _poseSession || !_poseEnabled) {
+          return;
+        }
+        clipIndex += 1;
+        final session = service.analyzeClip(
+          clipId: track.clipId,
+          framePaths: track.frames.map((frame) => frame.path).toList(),
+        );
+        final subscription = session.progress.listen((progress) {
+          if (!mounted || sessionId != _poseSession) {
+            return;
+          }
+          setState(() {
+            _poseProgressLabel =
+                '骨格解析 $clipIndex/2: '
+                '${progress.completed}/${progress.total}';
+          });
+        });
+        final result = await session.result;
+        await subscription.cancel();
+        if (!mounted || sessionId != _poseSession) {
+          return;
+        }
+        setState(() {
+          for (final frame in track.frames) {
+            final pose = result[PoseAnalysisService.keyForPath(frame.path)];
+            if (pose != null) {
+              _poses[frame.path] = pose;
+            }
+          }
+        });
+      }
+    } on Object {
+      if (mounted && sessionId == _poseSession) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('骨格解析に失敗しました。')));
+      }
+    } finally {
+      if (mounted && sessionId == _poseSession) {
+        setState(() {
+          _poseAnalyzing = false;
+          _poseProgressLabel = '';
+        });
+      }
+    }
   }
 
   void _precacheUpcoming(ComparisonController controller) {
@@ -582,6 +689,7 @@ class _CompareScreenState extends ConsumerState<CompareScreen>
                       ? 'A'
                       : 'B',
                 ),
+              if (_poseEnabled) _poseHud(frameA, frameB),
             ],
           ),
         ),
@@ -606,9 +714,53 @@ class _CompareScreenState extends ConsumerState<CompareScreen>
     ];
     return KeyedSubtree(
       key: Key('split-view-${_splitAxis.name}'),
-      child: _splitAxis == ComparisonSplitAxis.vertical
-          ? Column(children: panels)
-          : Row(children: panels),
+      child: Stack(
+        fit: StackFit.expand,
+        children: <Widget>[
+          _splitAxis == ComparisonSplitAxis.vertical
+              ? Column(children: panels)
+              : Row(children: panels),
+          if (_poseEnabled) _poseHud(frameA, frameB),
+        ],
+      ),
+    );
+  }
+
+  Widget _poseHud(ComparisonFrame frameA, ComparisonFrame frameB) {
+    return Positioned(
+      left: 8,
+      right: 8,
+      bottom: 8,
+      child: IgnorePointer(
+        child: Column(
+          key: const Key('pose-angle-hud'),
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: <Widget>[
+            if (_poseAnalyzing && _poseProgressLabel.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 6),
+                child: Text(
+                  _poseProgressLabel,
+                  key: const Key('pose-analysis-progress'),
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(color: Colors.white, fontSize: 12),
+                ),
+              ),
+            PoseAngleHud(
+              label: 'A',
+              pose: _poseFor(frameA.path),
+              color: _poseColorA,
+            ),
+            const SizedBox(height: 4),
+            PoseAngleHud(
+              label: 'B',
+              pose: _poseFor(frameB.path),
+              color: _poseColorB,
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -654,6 +806,8 @@ class _CompareScreenState extends ConsumerState<CompareScreen>
           path: frame.path,
           transform: controller.transformFor(clipId),
           cacheWidth: _decodeWidth,
+          pose: _poseFor(frame.path),
+          skeletonColor: label == 'A' ? _poseColorA : _poseColorB,
         ),
         Positioned(
           left: 8,
@@ -780,7 +934,9 @@ class _CompareScreenState extends ConsumerState<CompareScreen>
         '透過は2本を重ね、分割は上下または左右に並べます。\n\n'
         '基準同期では、AとBそれぞれの同じ瞬間を選んで再生位置を揃えます。\n\n'
         '位置合わせでは、ドラッグで移動、ピンチで拡大縮小、2本指で回転できます。\n'
-        '透過の操作対象と比較グリッドは、設定から選べます。',
+        '透過の操作対象と比較グリッドは、設定から選べます。\n\n'
+        '骨格表示をオンにすると、端末内だけで頭・肩・腰・膝・足元の点を推定し、'
+        '関節角度を表示します。映像は外部へ送信されません。',
       ),
       actions: <Widget>[
         TextButton(
@@ -967,6 +1123,15 @@ class _CompareScreenState extends ConsumerState<CompareScreen>
                         ),
                       ),
                     ),
+                  _settingsRow(
+                    label: '骨格表示',
+                    child: Switch(
+                      key: const Key('pose-overlay-toggle'),
+                      value: _poseEnabled,
+                      onChanged: (enabled) =>
+                          unawaited(_setPoseEnabled(enabled, controller)),
+                    ),
+                  ),
                   _settingsRow(
                     label: '位置合わせ',
                     child: Align(
