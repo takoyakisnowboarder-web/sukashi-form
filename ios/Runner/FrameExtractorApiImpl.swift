@@ -172,19 +172,34 @@ final class FrameExtractorApiImpl: FrameExtractorApi {
     }
 
     let asset = AVURLAsset(url: URL(fileURLWithPath: request.absoluteVideoPath))
-    let durationSeconds = CMTimeGetSeconds(asset.duration)
+    guard let track = asset.tracks(withMediaType: .video).first else {
+      throw ExtractionFailure("frame_count_unavailable")
+    }
+    // コンテナの尺は音声の余りで映像より長くなることがある。
+    // 3.2秒は成功して 3.4秒だけ失敗、のような差はここで出やすい。
+    let assetDurationSeconds = CMTimeGetSeconds(asset.duration)
+    let trackDurationSeconds = CMTimeGetSeconds(track.timeRange.duration)
+    let durationSeconds: Double
+    if trackDurationSeconds.isFinite, trackDurationSeconds > 0 {
+      durationSeconds = min(
+        assetDurationSeconds.isFinite && assetDurationSeconds > 0
+          ? assetDurationSeconds
+          : trackDurationSeconds,
+        trackDurationSeconds
+      )
+    } else {
+      durationSeconds = assetDurationSeconds
+    }
     guard durationSeconds.isFinite, durationSeconds > 0 else {
       throw ExtractionFailure("invalid_duration")
     }
     let durationMs = Int64((durationSeconds * 1000.0).rounded())
     guard durationMs > 0 else { throw ExtractionFailure("invalid_duration") }
+    let trackStartSeconds = max(0, CMTimeGetSeconds(track.timeRange.start))
 
     // iOS には Android の METADATA_KEY_VIDEO_FRAME_COUNT に相当する API が無いため、
     // 公称フレームレートと尺から総フレーム数を見積もる。
     // 短い取り込み動画では nominalFrameRate が 0 になることがあるので 30fps で補う。
-    guard let track = asset.tracks(withMediaType: .video).first else {
-      throw ExtractionFailure("frame_count_unavailable")
-    }
     let reportedFps = Double(track.nominalFrameRate)
     let nominalFps = reportedFps > 1 ? reportedFps : 30.0
     let sourceFrameCount = max(1, Int((durationSeconds * nominalFps).rounded()))
@@ -253,8 +268,13 @@ final class FrameExtractorApiImpl: FrameExtractorApi {
     var indexByTimeValue: [Int64: Int] = [:]
     var times: [NSValue] = []
     times.reserveCapacity(sourceIndices.count)
+    let lastMediaSeconds = max(
+      trackStartSeconds,
+      trackStartSeconds + durationSeconds - (0.25 / max(sourceFps, 1))
+    )
     for (outputIndex, sourceIndex) in sourceIndices.enumerated() {
-      let seconds = (Double(sourceIndex) + 0.5) / sourceFps
+      let rawSeconds = trackStartSeconds + (Double(sourceIndex) + 0.5) / sourceFps
+      let seconds = min(max(trackStartSeconds, rawSeconds), lastMediaSeconds)
       let time = CMTime(
         value: CMTimeValue((seconds * Double(timescale)).rounded()),
         timescale: timescale
@@ -286,6 +306,7 @@ final class FrameExtractorApiImpl: FrameExtractorApi {
     var completedCount = 0
     var writtenFrames = 0
     var failureReason: String?
+    var pendingRetries: [(index: Int, time: CMTime)] = []
     let finished = DispatchSemaphore(value: 0)
 
     sendProgress(taskId: taskId, completed: 0, total: totalFrames)
@@ -297,9 +318,14 @@ final class FrameExtractorApiImpl: FrameExtractorApi {
 
       stateLock.lock()
       if failureReason == nil, !token.isCancelled {
+        let outputIndex = self.outputIndex(
+          for: requestedTime,
+          indexByTimeValue: indexByTimeValue,
+          timescale: timescale
+        )
         switch result {
         case .succeeded:
-          if let cgImage, let outputIndex = indexByTimeValue[requestedTime.value] {
+          if let cgImage, let outputIndex {
             do {
               try self.writeJpegAtomically(
                 cgImage,
@@ -316,11 +342,17 @@ final class FrameExtractorApiImpl: FrameExtractorApi {
             } catch {
               failureReason = "frame_write_failed"
             }
+          } else if let outputIndex {
+            pendingRetries.append((outputIndex, requestedTime))
           } else {
             failureReason = "frame_decode_failed"
           }
         case .failed:
-          failureReason = "frame_decode_failed"
+          if let outputIndex {
+            pendingRetries.append((outputIndex, requestedTime))
+          } else {
+            failureReason = "frame_decode_failed"
+          }
         case .cancelled:
           break
         @unknown default:
@@ -339,6 +371,26 @@ final class FrameExtractorApiImpl: FrameExtractorApi {
       }
     }
     finished.wait()
+
+    stateLock.lock()
+    let retries = pendingRetries
+    let earlyFailure = failureReason
+    stateLock.unlock()
+
+    if !token.isCancelled, earlyFailure == nil, !retries.isEmpty {
+      let recovered = recoverMissingFrames(
+        generator: generator,
+        retries: retries,
+        outputDirectory: outputDirectory,
+        maxLongEdgePx: maxLongEdgePx,
+        jpegQuality: jpegQuality,
+        token: token
+      )
+      stateLock.lock()
+      writtenFrames += recovered.written
+      failureReason = recovered.failureReason
+      stateLock.unlock()
+    }
 
     stateLock.lock()
     let finalWritten = writtenFrames
@@ -392,6 +444,77 @@ final class FrameExtractorApiImpl: FrameExtractorApi {
       sourceFps: sourceFps,
       errorReason: nil
     )
+  }
+
+  private func outputIndex(
+    for requestedTime: CMTime,
+    indexByTimeValue: [Int64: Int],
+    timescale: CMTimeScale
+  ) -> Int? {
+    if let exact = indexByTimeValue[requestedTime.value] {
+      return exact
+    }
+    let seconds = CMTimeGetSeconds(requestedTime)
+    guard seconds.isFinite else { return nil }
+    var bestIndex: Int?
+    var bestDelta = Double.infinity
+    for (value, index) in indexByTimeValue {
+      let candidate = Double(value) / Double(timescale)
+      let delta = abs(candidate - seconds)
+      if delta < bestDelta {
+        bestDelta = delta
+        bestIndex = index
+      }
+    }
+    return bestDelta < 0.08 ? bestIndex : nil
+  }
+
+  private func recoverMissingFrames(
+    generator: AVAssetImageGenerator,
+    retries: [(index: Int, time: CMTime)],
+    outputDirectory: URL,
+    maxLongEdgePx: Int,
+    jpegQuality: Int,
+    token: CancellationToken
+  ) -> (written: Int, failureReason: String?) {
+    let previousBefore = generator.requestedTimeToleranceBefore
+    let previousAfter = generator.requestedTimeToleranceAfter
+    generator.requestedTimeToleranceBefore = .positiveInfinity
+    generator.requestedTimeToleranceAfter = .positiveInfinity
+    defer {
+      generator.requestedTimeToleranceBefore = previousBefore
+      generator.requestedTimeToleranceAfter = previousAfter
+    }
+    var written = 0
+    var lastImage: CGImage?
+    let sorted = retries.sorted { $0.index < $1.index }
+    for item in sorted {
+      if token.isCancelled {
+        return (written, nil)
+      }
+      let image =
+        (try? generator.copyCGImage(at: item.time, actualTime: nil))
+        ?? lastImage
+        ?? (try? generator.copyCGImage(at: .zero, actualTime: nil))
+      guard let image else {
+        return (written, "frame_decode_failed")
+      }
+      do {
+        try writeJpegAtomically(
+          image,
+          to: outputDirectory.appendingPathComponent(
+            String(format: "frame_%06d.jpg", item.index)
+          ),
+          maxLongEdgePx: maxLongEdgePx,
+          jpegQuality: jpegQuality
+        )
+        lastImage = image
+        written += 1
+      } catch {
+        return (written, "frame_write_failed")
+      }
+    }
+    return (written, nil)
   }
 
   /// framesInWindow 個のフレームから targetCount 個を等間隔で選ぶ(Android と同じ式)。

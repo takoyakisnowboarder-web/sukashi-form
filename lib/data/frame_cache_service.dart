@@ -54,6 +54,16 @@ class FrameExtractionCancelled extends FrameExtractionException {
   const FrameExtractionCancelled() : super('cancelled');
 }
 
+String framePreparationLabel({
+  required int clipIndex,
+  required String? memo,
+  required String reason,
+}) {
+  final trimmed = memo?.trim() ?? '';
+  final label = trimmed.isEmpty ? '${clipIndex + 1}本目' : trimmed;
+  return '$label:$reason';
+}
+
 abstract interface class FrameExtractionClient {
   Stream<FrameExtractionProgress> get progress;
 

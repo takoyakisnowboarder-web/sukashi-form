@@ -166,7 +166,17 @@ class _CompareScreenState extends ConsumerState<CompareScreen>
         _progressSubscription = session.progress.listen((value) {
           if (mounted) setState(() => _progress = value);
         });
-        _results.add(await session.result);
+        try {
+          _results.add(await session.result);
+        } on FrameExtractionException catch (error) {
+          throw FrameExtractionException(
+            framePreparationLabel(
+              clipIndex: index,
+              memo: selected[index].memo,
+              reason: error.reason,
+            ),
+          );
+        }
         unawaited(_progressSubscription?.cancel());
         _progressSubscription = null;
         _activeSession = null;

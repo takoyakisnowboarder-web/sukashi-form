@@ -42,6 +42,17 @@ void main() {
     }
   });
 
+  test('比較の失敗理由に何本目かを付ける', () {
+    expect(
+      framePreparationLabel(clipIndex: 1, memo: null, reason: 'frame_decode_failed'),
+      '2本目:frame_decode_failed',
+    );
+    expect(
+      framePreparationLabel(clipIndex: 0, memo: '  左足  ', reason: 'invalid_duration'),
+      '左足:invalid_duration',
+    );
+  });
+
   test('完成済みキャッシュはネイティブ展開せず再利用する', () async {
     client.onExtract = (taskId, request) async {
       await _writeFrames(request, 3);
