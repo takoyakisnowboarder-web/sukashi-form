@@ -55,9 +55,24 @@ class PoseFrame {
   final double imageHeight;
   final Map<PoseJoint, PosePoint> landmarks;
 
+  /// iOS の ML Kit は座標が出ていても likelihood が常に 0 になることがある。
+  bool get treatsUnscoredPointsAsVisible {
+    return landmarks.isNotEmpty &&
+        landmarks.values.every((point) => point.visibility == 0);
+  }
+
   PosePoint? visible(PoseJoint joint) {
     final point = landmarks[joint];
-    if (point == null || !point.isVisible) {
+    if (point == null) {
+      return null;
+    }
+    if (treatsUnscoredPointsAsVisible) {
+      if (point.x < 0 || point.x > 1 || point.y < 0 || point.y > 1) {
+        return null;
+      }
+      return point;
+    }
+    if (!point.isVisible) {
       return null;
     }
     return point;

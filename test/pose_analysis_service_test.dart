@@ -39,6 +39,20 @@ void main() {
     expect(pose.leftKneeAngle, isNull);
   });
 
+  test('全点の信頼度が0でも画面内の点は使う', () {
+    const pose = PoseFrame(
+      imageWidth: 100,
+      imageHeight: 200,
+      landmarks: <PoseJoint, PosePoint>{
+        PoseJoint.leftHip: PosePoint(x: 0.4, y: 0.3, visibility: 0),
+        PoseJoint.leftKnee: PosePoint(x: 0.4, y: 0.6, visibility: 0),
+        PoseJoint.leftAnkle: PosePoint(x: 0.4, y: 0.9, visibility: 0),
+      },
+    );
+    expect(pose.leftKneeAngle, closeTo(180, 0.01));
+    expect(pose.visible(PoseJoint.leftKnee), isNotNull);
+  });
+
   test('解析結果を端末内キャッシュへ往復保存する', () async {
     final directory = await Directory.systemTemp.createTemp('pose_cache_');
     addTearDown(() async {

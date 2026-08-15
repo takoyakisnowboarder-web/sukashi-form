@@ -51,11 +51,13 @@ class ComparisonFrameView extends StatelessWidget {
                   ),
                 ),
                 if (pose != null)
-                  CustomPaint(
-                    key: Key('pose-skeleton-$clipId'),
-                    painter: PoseSkeletonPainter(
-                      pose: pose!,
-                      color: skeletonColor,
+                  Positioned.fill(
+                    child: CustomPaint(
+                      key: Key('pose-skeleton-$clipId'),
+                      painter: PoseSkeletonPainter(
+                        pose: pose!,
+                        color: skeletonColor,
+                      ),
                     ),
                   ),
               ],

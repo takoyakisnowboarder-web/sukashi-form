@@ -33,7 +33,7 @@ class PoseSkeletonPainter extends CustomPainter {
 
     final bonePaint = Paint()
       ..color = color
-      ..strokeWidth = 2.4
+      ..strokeWidth = 3.2
       ..strokeCap = StrokeCap.round
       ..style = PaintingStyle.stroke;
     for (final bone in poseBones) {
@@ -47,14 +47,15 @@ class PoseSkeletonPainter extends CustomPainter {
 
     final fill = Paint()..color = color;
     final highlight = Paint()..color = Colors.white;
-    for (final entry in pose.landmarks.entries) {
-      if (!entry.value.isVisible) {
+    for (final joint in pose.landmarks.keys) {
+      final point = pose.visible(joint);
+      if (point == null) {
         continue;
       }
-      final center = map(entry.value);
-      final radius = highlightedJoints.contains(entry.key) ? 4.2 : 2.6;
+      final center = map(point);
+      final radius = highlightedJoints.contains(joint) ? 5.2 : 3.2;
       canvas.drawCircle(center, radius, fill);
-      if (highlightedJoints.contains(entry.key)) {
+      if (highlightedJoints.contains(joint)) {
         canvas.drawCircle(center, radius * 0.35, highlight);
       }
     }

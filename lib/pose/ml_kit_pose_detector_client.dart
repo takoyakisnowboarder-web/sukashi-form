@@ -14,7 +14,7 @@ class MlKitPoseDetectorClient implements PoseDetectorClient {
           detector ??
           PoseDetector(
             options: PoseDetectorOptions(
-              mode: PoseDetectionMode.stream,
+              mode: PoseDetectionMode.single,
               model: PoseDetectionModel.base,
             ),
           );
