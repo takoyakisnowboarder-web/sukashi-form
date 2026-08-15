@@ -16,7 +16,7 @@ class MlKitPoseDetectorClient implements PoseDetectorClient {
           PoseDetector(
             options: PoseDetectorOptions(
               mode: PoseDetectionMode.single,
-              model: PoseDetectionModel.base,
+              model: PoseDetectionModel.accurate,
             ),
           );
 
@@ -35,23 +35,43 @@ class MlKitPoseDetectorClient implements PoseDetectorClient {
     if (!await file.exists()) {
       return null;
     }
+    final size = await _orientedImageSize(file);
+    if (size == null) {
+      return null;
+    }
+    final fromFile = await _detect(
+      InputImage.fromFile(file),
+      width: size.width,
+      height: size.height,
+    );
+    if (fromFile != null) {
+      return fromFile;
+    }
     final decoded = await _decodeForDetection(file);
     if (decoded == null) {
       return null;
     }
+    return _detect(
+      InputImage.fromBitmap(
+        bitmap: decoded.bytes,
+        width: decoded.width,
+        height: decoded.height,
+      ),
+      width: decoded.width.toDouble(),
+      height: decoded.height.toDouble(),
+    );
+  }
+
+  Future<PoseFrame?> _detect(
+    InputImage image, {
+    required double width,
+    required double height,
+  }) async {
     try {
-      final poses = await _detector.processImage(
-        InputImage.fromBitmap(
-          bitmap: decoded.bytes,
-          width: decoded.width,
-          height: decoded.height,
-        ),
-      );
+      final poses = await _detector.processImage(image);
       if (poses.isEmpty) {
         return null;
       }
-      final width = decoded.width.toDouble();
-      final height = decoded.height.toDouble();
       final landmarks = <PoseJoint, PosePoint>{};
       for (final entry in _jointMap.entries) {
         final landmark = poses.first.landmarks[entry.value];
@@ -92,12 +112,27 @@ class MlKitPoseDetectorClient implements PoseDetectorClient {
     await _detector.close();
   }
 
+  static Future<ui.Size?> _orientedImageSize(File file) async {
+    final bytes = await file.readAsBytes();
+    if (bytes.isEmpty) {
+      return null;
+    }
+    final codec = await ui.instantiateImageCodec(bytes);
+    final frame = await codec.getNextFrame();
+    final image = frame.image;
+    try {
+      return ui.Size(image.width.toDouble(), image.height.toDouble());
+    } finally {
+      image.dispose();
+    }
+  }
+
   static Future<_DecodedFrame?> _decodeForDetection(File file) async {
     final bytes = await file.readAsBytes();
     if (bytes.isEmpty) {
       return null;
     }
-    final codec = await ui.instantiateImageCodec(bytes, targetWidth: 640);
+    final codec = await ui.instantiateImageCodec(bytes, targetWidth: 720);
     final frame = await codec.getNextFrame();
     final image = frame.image;
     try {
