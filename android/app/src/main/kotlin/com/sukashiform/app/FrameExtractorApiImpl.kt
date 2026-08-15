@@ -243,22 +243,28 @@ class FrameExtractorApiImpl(
             if (durationMs <= 0L) {
                 return extractionError("invalid_duration")
             }
-            val sourceFrameCount = retriever
+            val reportedFrameCount = retriever
                 .longMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_FRAME_COUNT)
                 ?.coerceAtMost(Int.MAX_VALUE.toLong())
                 ?.toInt()
-                ?: return extractionError("frame_count_unavailable", durationMs)
-            if (sourceFrameCount <= 0) {
-                return extractionError("frame_count_unavailable", durationMs)
+            val sourceFrameCount = if (reportedFrameCount != null && reportedFrameCount > 0) {
+                reportedFrameCount
+            } else {
+                (durationMs * 30L / 1000L).toInt().coerceAtLeast(1)
             }
 
             sourceFps = sourceFrameCount.toDouble() / (durationMs.toDouble() / 1000.0)
             val rangeStartMs = request.rangeStartMs ?: 0L
-            val requestedRangeEndMs = request.rangeEndMs
+            var requestedRangeEndMs = request.rangeEndMs
                 ?: minOf(durationMs, rangeStartMs + MAX_EXTRACTION_DURATION_MS)
-            require(rangeStartMs in 0 until durationMs) { "Invalid rangeStartMs." }
-            require(requestedRangeEndMs in (rangeStartMs + 1)..durationMs) {
-                "Invalid rangeEndMs."
+            if (requestedRangeEndMs > durationMs) {
+                requestedRangeEndMs = durationMs
+            }
+            if (rangeStartMs !in 0 until durationMs) {
+                return extractionError("invalid_range_start", durationMs, sourceFps)
+            }
+            if (requestedRangeEndMs <= rangeStartMs) {
+                return extractionError("invalid_range_end", durationMs, sourceFps)
             }
             val isWholeVideoPreview = request.maxFrames <= PREVIEW_MAX_FRAMES &&
                 request.maxLongEdgePx <= PREVIEW_MAX_LONG_EDGE_PX

@@ -52,7 +52,7 @@ workflows:
           # ビルド番号を Codemagic のビルド連番にして、
           # TestFlight への再アップロードでも一意になるようにする。
           flutter build ipa --release \
-            --build-name=1.0.6 \
+            --build-name=1.0.7 \
             --build-number=$BUILD_NUMBER \
             --export-options-plist=/Users/builder/export_options.plist
     artifacts:

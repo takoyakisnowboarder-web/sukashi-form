@@ -181,25 +181,27 @@ final class FrameExtractorApiImpl: FrameExtractorApi {
 
     // iOS には Android の METADATA_KEY_VIDEO_FRAME_COUNT に相当する API が無いため、
     // 公称フレームレートと尺から総フレーム数を見積もる。
-    guard let track = asset.tracks(withMediaType: .video).first,
-      track.nominalFrameRate > 0
-    else {
+    // 短い取り込み動画では nominalFrameRate が 0 になることがあるので 30fps で補う。
+    guard let track = asset.tracks(withMediaType: .video).first else {
       throw ExtractionFailure("frame_count_unavailable")
     }
-    let nominalFps = Double(track.nominalFrameRate)
-    let sourceFrameCount = Int((durationSeconds * nominalFps).rounded())
-    guard sourceFrameCount > 0 else { throw ExtractionFailure("frame_count_unavailable") }
+    let reportedFps = Double(track.nominalFrameRate)
+    let nominalFps = reportedFps > 1 ? reportedFps : 30.0
+    let sourceFrameCount = max(1, Int((durationSeconds * nominalFps).rounded()))
     let sourceFps = Double(sourceFrameCount) / (Double(durationMs) / 1000.0)
 
     // --- 展開する時間範囲を決める(Android と同じ規則) ---
     let rangeStartMs = request.rangeStartMs ?? 0
-    let requestedRangeEndMs =
+    var requestedRangeEndMs =
       request.rangeEndMs
       ?? min(durationMs, rangeStartMs + Self.maxExtractionDurationMs)
+    if requestedRangeEndMs > durationMs {
+      requestedRangeEndMs = durationMs
+    }
     guard rangeStartMs >= 0, rangeStartMs < durationMs else {
       throw ExtractionFailure("invalid_range_start")
     }
-    guard requestedRangeEndMs > rangeStartMs, requestedRangeEndMs <= durationMs else {
+    guard requestedRangeEndMs > rangeStartMs else {
       throw ExtractionFailure("invalid_range_end")
     }
     // 動画全体のプレビュー帯(少数・低解像度)のときだけ10秒上限を外す。
@@ -269,9 +271,11 @@ final class FrameExtractorApiImpl: FrameExtractorApi {
       width: CGFloat(request.maxLongEdgePx),
       height: CGFloat(request.maxLongEdgePx)
     )
-    // コマ送りの精度が売りなので、時刻の許容誤差は与えない(厳密なフレームを取る)。
-    generator.requestedTimeToleranceBefore = .zero
-    generator.requestedTimeToleranceAfter = .zero
+    // コマ送りの精度は保ちつつ、短い動画や可変フレームレートで
+    // 厳密時刻が無いときに隣のフレームへ倒れるようにする。
+    let oneFrame = CMTime(seconds: 1.0 / max(sourceFps, 1), preferredTimescale: timescale)
+    generator.requestedTimeToleranceBefore = oneFrame
+    generator.requestedTimeToleranceAfter = oneFrame
     setActiveGenerator(generator, for: taskId)
     defer { setActiveGenerator(nil, for: taskId) }
 

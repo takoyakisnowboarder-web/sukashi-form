@@ -172,18 +172,20 @@ class _CompareScreenState extends ConsumerState<CompareScreen>
         _activeSession = null;
       }
 
-      final tracks = <ComparisonTrack>[
-        for (var index = 0; index < 2; index++)
-          ComparisonTrack.evenlySpaced(
-            clipId: selected[index].id,
-            rangeStartMs: (selected[index].trimStartMs ?? 0).toDouble(),
-            rangeEndMs:
-                (selected[index].trimEndMs ??
-                        selected[index].durationMs.clamp(0, 10000))
-                    .toDouble(),
-            paths: _results[index].absoluteFramePaths,
-          ),
-      ];
+      final tracks = List<ComparisonTrack>.generate(2, (index) {
+        final range = comparisonPlaybackRange(
+          trimStartMs: selected[index].trimStartMs,
+          trimEndMs: selected[index].trimEndMs,
+          clipDurationMs: selected[index].durationMs,
+          extractedDurationMs: _results[index].sourceDurationMs,
+        );
+        return ComparisonTrack.evenlySpaced(
+          clipId: selected[index].id,
+          rangeStartMs: range.startMs,
+          rangeEndMs: range.endMs,
+          paths: _results[index].absoluteFramePaths,
+        );
+      });
       final ranges = <String, ComparisonClipRange>{
         for (final track in tracks)
           track.clipId: ComparisonClipRange(

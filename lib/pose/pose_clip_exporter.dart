@@ -37,11 +37,16 @@ class PoseClipExporter {
     }
     onProgress?.call('フレームを準備しています…');
     final extracted = await _extract(clip);
+    final range = comparisonPlaybackRange(
+      trimStartMs: clip.trimStartMs,
+      trimEndMs: clip.trimEndMs,
+      clipDurationMs: clip.durationMs,
+      extractedDurationMs: extracted.sourceDurationMs,
+    );
     final track = ComparisonTrack.evenlySpaced(
       clipId: clip.id,
-      rangeStartMs: (clip.trimStartMs ?? 0).toDouble(),
-      rangeEndMs: (clip.trimEndMs ?? clip.durationMs.clamp(0, 10000))
-          .toDouble(),
+      rangeStartMs: range.startMs,
+      rangeEndMs: range.endMs,
       paths: extracted.absoluteFramePaths,
     );
     onProgress?.call('座標を書き出しています…');

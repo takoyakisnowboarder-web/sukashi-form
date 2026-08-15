@@ -60,6 +60,25 @@ class ComparisonTrack {
       (rangeEndMs - rangeStartMs) / frames.length;
 }
 
+/// 比較トラックの時間範囲。取り込み直後は [clipDurationMs] が 0 のことがあるので、
+/// 展開結果の尺を優先する。
+({double startMs, double endMs}) comparisonPlaybackRange({
+  required int? trimStartMs,
+  required int? trimEndMs,
+  required int clipDurationMs,
+  required int extractedDurationMs,
+}) {
+  final start = (trimStartMs ?? 0).toDouble();
+  final preferredEnd =
+      trimEndMs ??
+      (extractedDurationMs > 0 ? extractedDurationMs : clipDurationMs);
+  final end = preferredEnd.toDouble();
+  if (end > start) {
+    return (startMs: start, endMs: end);
+  }
+  return (startMs: start, endMs: start + 1);
+}
+
 class AlignmentTransform {
   const AlignmentTransform({
     this.dx = 0,

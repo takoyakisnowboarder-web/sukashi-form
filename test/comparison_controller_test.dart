@@ -103,6 +103,34 @@ void main() {
     expect(c.transformFor('a'), const AlignmentTransform());
     expect(c.transformFor('b'), value);
   });
+
+  test('取り込み直後の短い動画は展開した尺で範囲を決める', () {
+    final imported = comparisonPlaybackRange(
+      trimStartMs: null,
+      trimEndMs: null,
+      clipDurationMs: 0,
+      extractedDurationMs: 3000,
+    );
+    expect(imported.startMs, 0);
+    expect(imported.endMs, 3000);
+
+    final trimmed = comparisonPlaybackRange(
+      trimStartMs: 200,
+      trimEndMs: 2800,
+      clipDurationMs: 3000,
+      extractedDurationMs: 3000,
+    );
+    expect(trimmed.startMs, 200);
+    expect(trimmed.endMs, 2800);
+
+    final empty = comparisonPlaybackRange(
+      trimStartMs: null,
+      trimEndMs: null,
+      clipDurationMs: 0,
+      extractedDurationMs: 0,
+    );
+    expect(empty.endMs, greaterThan(empty.startMs));
+  });
 }
 
 ComparisonController _controller() => ComparisonController(
