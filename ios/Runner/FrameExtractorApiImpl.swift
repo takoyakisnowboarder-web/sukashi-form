@@ -1,6 +1,7 @@
 import AVFoundation
 import Flutter
 import UIKit
+import Vision
 
 /// iOS 版のフレーム展開ネイティブ実装。
 ///
@@ -417,6 +418,118 @@ final class FrameExtractorApiImpl: FrameExtractorApi {
 
   func setVolumeKeyCaptureEnabled(enabled: Bool) throws {
     // 音量キー録画はフェーズ3。iOS には dispatchKeyEvent 相当が無いため要調査。
+  }
+
+  func detectPose(
+    absoluteImagePath: String,
+    completion: @escaping (Result<NativePoseResult, Error>) -> Void
+  ) {
+    completion(.success(detectHumanPose(at: absoluteImagePath)))
+  }
+
+  private static let visionJoints: [VNHumanBodyPoseObservation.JointName: String] = [
+    .nose: "nose",
+    .leftShoulder: "leftShoulder",
+    .rightShoulder: "rightShoulder",
+    .leftElbow: "leftElbow",
+    .rightElbow: "rightElbow",
+    .leftWrist: "leftWrist",
+    .rightWrist: "rightWrist",
+    .leftHip: "leftHip",
+    .rightHip: "rightHip",
+    .leftKnee: "leftKnee",
+    .rightKnee: "rightKnee",
+    .leftAnkle: "leftAnkle",
+    .rightAnkle: "rightAnkle",
+  ]
+
+  private func detectHumanPose(at path: String) -> NativePoseResult {
+    guard fileSize(at: path) > 0 else {
+      return emptyPose()
+    }
+    let request = VNDetectHumanBodyPoseRequest()
+    let handler: VNImageRequestHandler
+    let width: Double
+    let height: Double
+    if let image = UIImage(contentsOfFile: path), let cgImage = image.cgImage {
+      handler = VNImageRequestHandler(
+        cgImage: cgImage,
+        orientation: cgImageOrientation(from: image.imageOrientation),
+        options: [:]
+      )
+      let size = orientedPixelSize(of: cgImage, orientation: image.imageOrientation)
+      width = size.width
+      height = size.height
+    } else {
+      handler = VNImageRequestHandler(url: URL(fileURLWithPath: path), options: [:])
+      width = 1
+      height = 1
+    }
+    do {
+      try handler.perform([request])
+    } catch {
+      return emptyPose()
+    }
+    guard let observation = request.results?.first else {
+      return emptyPose()
+    }
+    var landmarks: [NativePoseLandmark] = []
+    for (joint, name) in Self.visionJoints {
+      guard let point = try? observation.recognizedPoint(joint),
+        point.confidence > 0.05,
+        point.location.x.isFinite,
+        point.location.y.isFinite
+      else {
+        continue
+      }
+      landmarks.append(
+        NativePoseLandmark(
+          joint: name,
+          x: min(max(point.location.x, 0), 1),
+          y: min(max(1.0 - point.location.y, 0), 1),
+          visibility: Double(point.confidence)
+        )
+      )
+    }
+    if landmarks.isEmpty {
+      return emptyPose()
+    }
+    return NativePoseResult(
+      found: true,
+      imageWidth: width,
+      imageHeight: height,
+      landmarks: landmarks
+    )
+  }
+
+  private func emptyPose() -> NativePoseResult {
+    return NativePoseResult(found: false, imageWidth: 1, imageHeight: 1, landmarks: [])
+  }
+
+  private func orientedPixelSize(
+    of image: CGImage,
+    orientation: UIImage.Orientation
+  ) -> (width: Double, height: Double) {
+    switch orientation {
+    case .left, .leftMirrored, .right, .rightMirrored:
+      return (Double(image.height), Double(image.width))
+    default:
+      return (Double(image.width), Double(image.height))
+    }
+  }
+
+  private func cgImageOrientation(from orientation: UIImage.Orientation) -> CGImagePropertyOrientation {
+    switch orientation {
+    case .up: return .up
+    case .down: return .down
+    case .left: return .left
+    case .right: return .right
+    case .upMirrored: return .upMirrored
+    case .downMirrored: return .downMirrored
+    case .leftMirrored: return .leftMirrored
+    case .rightMirrored: return .rightMirrored
+    @unknown default: return .up
+    }
   }
 
   // MARK: - タスク管理

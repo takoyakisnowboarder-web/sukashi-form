@@ -92,6 +92,22 @@ class FrameExtractorApiImpl(
         mainHandler.post { onVolumeKeyCaptureChanged(enabled) }
     }
 
+    override fun detectPose(
+        absoluteImagePath: String,
+        callback: (Result<NativePoseResult>) -> Unit,
+    ) {
+        callback(
+            Result.success(
+                NativePoseResult(
+                    found = false,
+                    imageWidth = 1.0,
+                    imageHeight = 1.0,
+                    landmarks = emptyList(),
+                ),
+            ),
+        )
+    }
+
     private fun copyVideoToMediaStore(path: String) {
         check(Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             "Gallery saving requires Android 10 or newer."

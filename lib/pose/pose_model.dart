@@ -1,5 +1,14 @@
 import 'dart:math' as math;
 
+PoseJoint? poseJointNamed(String name) {
+  for (final joint in PoseJoint.values) {
+    if (joint.name == name) {
+      return joint;
+    }
+  }
+  return null;
+}
+
 enum PoseJoint {
   nose,
   leftShoulder,

@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'ios_vision_pose_detector_client.dart';
 import 'ml_kit_pose_detector_client.dart';
 import 'pose_model.dart';
 
@@ -26,7 +27,10 @@ class UnsupportedPoseDetectorClient implements PoseDetectorClient {
 }
 
 PoseDetectorClient createDefaultPoseDetectorClient() {
-  if (Platform.isAndroid || Platform.isIOS) {
+  if (Platform.isIOS) {
+    return IosVisionPoseDetectorClient();
+  }
+  if (Platform.isAndroid) {
     return MlKitPoseDetectorClient();
   }
   return const UnsupportedPoseDetectorClient();

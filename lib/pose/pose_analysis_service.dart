@@ -31,7 +31,7 @@ class PoseCacheRepository {
   PoseCacheRepository(this._clipRepository);
 
   static const fileName = 'pose_landmarks.json';
-  static const version = 4;
+  static const version = 5;
 
   final ClipRepository _clipRepository;
 

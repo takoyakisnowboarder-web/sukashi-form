@@ -50,6 +50,34 @@ class ExtractRequest {
   int? rangeEndMs;
 }
 
+class NativePoseLandmark {
+  NativePoseLandmark({
+    required this.joint,
+    required this.x,
+    required this.y,
+    required this.visibility,
+  });
+
+  String joint;
+  double x;
+  double y;
+  double visibility;
+}
+
+class NativePoseResult {
+  NativePoseResult({
+    required this.found,
+    required this.imageWidth,
+    required this.imageHeight,
+    required this.landmarks,
+  });
+
+  bool found;
+  double imageWidth;
+  double imageHeight;
+  List<NativePoseLandmark> landmarks;
+}
+
 class ExtractResult {
   ExtractResult({
     required this.isComplete,
@@ -93,6 +121,10 @@ abstract class FrameExtractorApi {
   void saveVideoToGallery(String absoluteVideoPath);
 
   void setVolumeKeyCaptureEnabled(bool enabled);
+
+  @async
+  @TaskQueue(type: TaskQueueType.serialBackgroundThread)
+  NativePoseResult detectPose(String absoluteImagePath);
 }
 
 @FlutterApi()

@@ -2,6 +2,8 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sukashi_form/data/clip_repository.dart';
+import 'package:sukashi_form/native/frame_extractor.g.dart';
+import 'package:sukashi_form/pose/ios_vision_pose_detector_client.dart';
 import 'package:sukashi_form/pose/pose_analysis_service.dart';
 import 'package:sukashi_form/pose/pose_detector_client.dart';
 import 'package:sukashi_form/pose/pose_model.dart';
@@ -84,6 +86,54 @@ void main() {
     final loaded = await cache.load('clip-a');
     expect(loaded['frame_000000.jpg']!.imageWidth, 320);
     expect(loaded['frame_000000.jpg']!.landmarks[PoseJoint.nose]!.x, 0.5);
+  });
+
+  test('関節名から PoseJoint を引ける', () {
+    expect(poseJointNamed('leftKnee'), PoseJoint.leftKnee);
+    expect(poseJointNamed('nose'), PoseJoint.nose);
+    expect(poseJointNamed('unknown'), isNull);
+  });
+
+  test('iOS Vision の検出結果を骨格フレームへ写す', () {
+    final pose = poseFrameFromNativeResult(
+      NativePoseResult(
+        found: true,
+        imageWidth: 720,
+        imageHeight: 1280,
+        landmarks: <NativePoseLandmark>[
+          NativePoseLandmark(
+            joint: 'leftKnee',
+            x: 0.4,
+            y: 0.6,
+            visibility: 0.9,
+          ),
+          NativePoseLandmark(
+            joint: 'notAJoint',
+            x: 0.1,
+            y: 0.1,
+            visibility: 1,
+          ),
+        ],
+      ),
+    );
+    expect(pose, isNotNull);
+    expect(pose!.imageWidth, 720);
+    expect(pose.landmarks[PoseJoint.leftKnee]!.y, 0.6);
+    expect(pose.landmarks.containsKey(PoseJoint.nose), isFalse);
+  });
+
+  test('人が見つからない Vision 結果は空として扱う', () {
+    expect(
+      poseFrameFromNativeResult(
+        NativePoseResult(
+          found: false,
+          imageWidth: 1,
+          imageHeight: 1,
+          landmarks: <NativePoseLandmark>[],
+        ),
+      ),
+      isNull,
+    );
   });
 
   test('未解析フレームだけ検出してキャッシュする', () async {
