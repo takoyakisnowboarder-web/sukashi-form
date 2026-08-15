@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'dart:ui' as ui;
 
+import 'package:flutter/foundation.dart';
 import 'package:google_mlkit_commons/google_mlkit_commons.dart';
 import 'package:google_mlkit_pose_detection/google_mlkit_pose_detection.dart';
 
@@ -34,36 +35,52 @@ class MlKitPoseDetectorClient implements PoseDetectorClient {
     if (!await file.exists()) {
       return null;
     }
-    final size = await _readImageSize(file);
-    if (size == null || size.width <= 0 || size.height <= 0) {
+    final decoded = await _decodeForDetection(file);
+    if (decoded == null) {
       return null;
     }
-    final poses = await _detector.processImage(
-      InputImage.fromFilePath(imagePath),
-    );
-    if (poses.isEmpty) {
-      return null;
-    }
-    final landmarks = <PoseJoint, PosePoint>{};
-    for (final entry in _jointMap.entries) {
-      final landmark = poses.first.landmarks[entry.value];
-      if (landmark == null) {
-        continue;
-      }
-      landmarks[entry.key] = PosePoint(
-        x: landmark.x / size.width,
-        y: landmark.y / size.height,
-        visibility: landmark.likelihood,
+    try {
+      final poses = await _detector.processImage(
+        InputImage.fromBitmap(
+          bitmap: decoded.bytes,
+          width: decoded.width,
+          height: decoded.height,
+        ),
       );
-    }
-    if (landmarks.isEmpty) {
+      if (poses.isEmpty) {
+        return null;
+      }
+      final width = decoded.width.toDouble();
+      final height = decoded.height.toDouble();
+      final landmarks = <PoseJoint, PosePoint>{};
+      for (final entry in _jointMap.entries) {
+        final landmark = poses.first.landmarks[entry.value];
+        if (landmark == null) {
+          continue;
+        }
+        final point = normalizeImagePoint(
+          landmark.x,
+          landmark.y,
+          width: width,
+          height: height,
+        );
+        landmarks[entry.key] = PosePoint(
+          x: point.x,
+          y: point.y,
+          visibility: landmark.likelihood,
+        );
+      }
+      if (landmarks.isEmpty) {
+        return null;
+      }
+      return PoseFrame(
+        imageWidth: width,
+        imageHeight: height,
+        landmarks: landmarks,
+      );
+    } on Object {
       return null;
     }
-    return PoseFrame(
-      imageWidth: size.width,
-      imageHeight: size.height,
-      landmarks: landmarks,
-    );
   }
 
   @override
@@ -75,28 +92,40 @@ class MlKitPoseDetectorClient implements PoseDetectorClient {
     await _detector.close();
   }
 
-  static Future<ui.Size?> _readImageSize(File file) async {
+  static Future<_DecodedFrame?> _decodeForDetection(File file) async {
     final bytes = await file.readAsBytes();
     if (bytes.isEmpty) {
       return null;
     }
-    final buffer = await ui.ImmutableBuffer.fromUint8List(bytes);
+    final codec = await ui.instantiateImageCodec(bytes, targetWidth: 640);
+    final frame = await codec.getNextFrame();
+    final image = frame.image;
     try {
-      final descriptor = await ui.ImageDescriptor.encoded(buffer);
-      try {
-        return ui.Size(
-          descriptor.width.toDouble(),
-          descriptor.height.toDouble(),
-        );
-      } finally {
-        descriptor.dispose();
+      final data = await image.toByteData(format: ui.ImageByteFormat.rawRgba);
+      if (data == null) {
+        return null;
       }
-    } on Object {
-      return null;
+      return _DecodedFrame(
+        bytes: data.buffer.asUint8List(),
+        width: image.width,
+        height: image.height,
+      );
     } finally {
-      buffer.dispose();
+      image.dispose();
     }
   }
+}
+
+class _DecodedFrame {
+  const _DecodedFrame({
+    required this.bytes,
+    required this.width,
+    required this.height,
+  });
+
+  final Uint8List bytes;
+  final int width;
+  final int height;
 }
 
 const _jointMap = <PoseJoint, PoseLandmarkType>{

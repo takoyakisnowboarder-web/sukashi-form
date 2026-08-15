@@ -50,7 +50,7 @@ class ComparisonFrameView extends StatelessWidget {
                     child: Icon(Icons.broken_image, color: Colors.white),
                   ),
                 ),
-                if (pose != null)
+                if (pose != null && pose!.landmarks.isNotEmpty)
                   Positioned.fill(
                     child: CustomPaint(
                       key: Key('pose-skeleton-$clipId'),

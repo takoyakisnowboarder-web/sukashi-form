@@ -31,7 +31,7 @@ class PoseCacheRepository {
   PoseCacheRepository(this._clipRepository);
 
   static const fileName = 'pose_landmarks.json';
-  static const version = 2;
+  static const version = 3;
 
   final ClipRepository _clipRepository;
 
@@ -120,13 +120,21 @@ class PoseAnalysisService {
           if (cancelled) {
             break;
           }
-          cached[_key(path)] =
-              await _detector.detect(path) ??
-              const PoseFrame(
-                imageWidth: 1,
-                imageHeight: 1,
-                landmarks: <PoseJoint, PosePoint>{},
-              );
+          try {
+            cached[_key(path)] =
+                await _detector.detect(path) ??
+                const PoseFrame(
+                  imageWidth: 1,
+                  imageHeight: 1,
+                  landmarks: <PoseJoint, PosePoint>{},
+                );
+          } on Object {
+            cached[_key(path)] = const PoseFrame(
+              imageWidth: 1,
+              imageHeight: 1,
+              landmarks: <PoseJoint, PosePoint>{},
+            );
+          }
           completed += 1;
           progress.add(
             PoseAnalysisProgress(completed: completed, total: total),

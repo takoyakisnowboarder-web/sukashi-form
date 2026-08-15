@@ -7,6 +7,15 @@ import 'package:sukashi_form/pose/pose_detector_client.dart';
 import 'package:sukashi_form/pose/pose_model.dart';
 
 void main() {
+  test('画素座標は画像サイズで0-1に直し、既に正規化済みなら触らない', () {
+    final pixels = normalizeImagePoint(80, 40, width: 100, height: 200);
+    expect(pixels.x, closeTo(0.8, 0.0001));
+    expect(pixels.y, closeTo(0.2, 0.0001));
+    final normalized = normalizeImagePoint(0.4, 0.6, width: 100, height: 200);
+    expect(normalized.x, 0.4);
+    expect(normalized.y, 0.6);
+  });
+
   test('膝・腰・足の角度を可視点から計算する', () {
     const pose = PoseFrame(
       imageWidth: 100,

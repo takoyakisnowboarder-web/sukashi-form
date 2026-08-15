@@ -313,9 +313,14 @@ class _CompareScreenState extends ConsumerState<CompareScreen>
       }
     } finally {
       if (mounted && sessionId == _poseSession) {
+        final detected = _poses.values
+            .where((pose) => pose.landmarks.isNotEmpty)
+            .length;
         setState(() {
           _poseAnalyzing = false;
-          _poseProgressLabel = '';
+          _poseProgressLabel = detected == 0
+              ? '骨格を検出できませんでした'
+              : '骨格 $detected コマ検出';
         });
       }
     }
@@ -737,7 +742,7 @@ class _CompareScreenState extends ConsumerState<CompareScreen>
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: <Widget>[
-            if (_poseAnalyzing && _poseProgressLabel.isNotEmpty)
+            if (_poseProgressLabel.isNotEmpty)
               Padding(
                 padding: const EdgeInsets.only(bottom: 6),
                 child: Text(

@@ -174,6 +174,19 @@ const highlightedJoints = <PoseJoint>{
   PoseJoint.rightFootIndex,
 };
 
+({double x, double y}) normalizeImagePoint(
+  double x,
+  double y, {
+  required double width,
+  required double height,
+}) {
+  final looksLikePixels = x.abs() > 1.5 || y.abs() > 1.5;
+  if (!looksLikePixels || width <= 0 || height <= 0) {
+    return (x: x, y: y);
+  }
+  return (x: x / width, y: y / height);
+}
+
 double jointAngleDegrees(PosePoint a, PosePoint b, PosePoint c) {
   final bax = a.x - b.x;
   final bay = a.y - b.y;

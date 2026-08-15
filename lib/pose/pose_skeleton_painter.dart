@@ -89,7 +89,9 @@ class PoseAngleHud extends StatelessWidget {
     }
 
     final text = pose == null
-        ? '$label 未検出'
+        ? '$label 解析待ち'
+        : pose!.landmarks.isEmpty
+        ? '$label 人を検出できませんでした'
         : '$label  '
               '${format('左膝', pose!.leftKneeAngle)}  '
               '${format('右膝', pose!.rightKneeAngle)}  '
