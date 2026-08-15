@@ -68,6 +68,7 @@ void main() {
     await tester.longPress(find.text('この動画は読み込めません'));
     await tester.pumpAndSettle();
     expect(find.text('比較範囲を選択'), findsNothing);
+    expect(find.text('座標を保存'), findsNothing);
   });
 
   testWidgets('範囲設定済みクリップに選択範囲を表示する', (tester) async {
@@ -85,6 +86,16 @@ void main() {
       findsOneWidget,
     );
     expect(find.text('5.0秒 / 全体30.0秒'), findsOneWidget);
+  });
+
+  testWidgets('長押しメニューは1本だけの座標保存を出す', (tester) async {
+    await _pumpLibrary(tester, repository, <Clip>[
+      _clip(id: 'solo', durationMs: 5000),
+    ]);
+    await tester.longPress(find.text('メモなし'));
+    await tester.pumpAndSettle();
+    expect(find.text('座標を保存'), findsOneWidget);
+    expect(find.text('この1本だけをJSONで書き出します'), findsOneWidget);
   });
 }
 

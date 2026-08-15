@@ -15,6 +15,8 @@ import 'package:sukashi_form/models/clip.dart';
 import 'package:sukashi_form/models/comparison_pair.dart';
 import 'package:sukashi_form/pose/pose_analysis_service.dart';
 import 'package:sukashi_form/pose/pose_detector_client.dart';
+import 'package:sukashi_form/pose/pose_export.dart';
+import 'package:sukashi_form/pose/pose_export_sharer.dart';
 import 'package:sukashi_form/pose/pose_model.dart';
 import 'package:sukashi_form/providers/clip_providers.dart';
 import 'package:sukashi_form/providers/pose_providers.dart';
@@ -108,6 +110,7 @@ void main() {
           .toString(),
     );
 
+    await tester.ensureVisible(find.byKey(const Key('start-reference')));
     await tester.tap(find.byKey(const Key('start-reference')));
     await tester.pump();
     expect(find.text('ステップ1: Aの基準を選択'), findsOneWidget);
@@ -538,11 +541,13 @@ void main() {
     await _pumpFrames(tester, 20);
 
     await _openSettings(tester);
+    await tester.ensureVisible(find.byKey(const Key('comparison-grid-toggle')));
     await tester.tap(find.byKey(const Key('comparison-grid-toggle')));
     await tester.pump();
     expect(find.byKey(const Key('comparison-grid-type-cross')), findsOneWidget);
     await tester.tap(find.byKey(const Key('comparison-grid-type-cross')));
     await tester.pump();
+    await tester.ensureVisible(find.byKey(const Key('alignment-mode-toggle')));
     await tester.tap(find.byKey(const Key('alignment-mode-toggle')));
     await _pumpFrames(tester, 15);
 
@@ -599,6 +604,64 @@ void main() {
     expect(find.textContaining('左膝'), findsWidgets);
     expect(find.byKey(const Key('pose-skeleton-a')), findsOneWidget);
     expect(find.byKey(const Key('pose-skeleton-b')), findsOneWidget);
+  });
+
+  testWidgets('Aの座標書き出しでJSONファイルを共有する', (tester) async {
+    final detector = _FakePoseDetector();
+    final sharer = _RecordingPoseExportSharer();
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          clipRepositoryProvider.overrideWithValue(clipRepository),
+          comparisonPairRepositoryProvider.overrideWithValue(pairRepository),
+          clipListProvider.overrideWith(
+            () => _TestClipListNotifier(<Clip>[
+              _clip('a', 5000),
+              _clip('b', 5000),
+            ]),
+          ),
+          comparisonExtractionStarterProvider.overrideWithValue(
+            (_) => _completedSession(),
+          ),
+          poseDetectorClientProvider.overrideWithValue(detector),
+          poseAnalysisServiceProvider.overrideWithValue(
+            PoseAnalysisService(detector, _MemoryPoseCache(clipRepository)),
+          ),
+          poseExportSharerProvider.overrideWithValue(sharer),
+        ],
+        child: const MaterialApp(
+          home: CompareScreen(clipIds: <String>['a', 'b']),
+        ),
+      ),
+    );
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 100)),
+    );
+    await _pumpFrames(tester, 20);
+
+    await _openSettings(tester);
+    await tester.ensureVisible(find.byKey(const Key('pose-export-a')));
+    await tester.runAsync(() async {
+      await tester.tap(find.byKey(const Key('pose-export-a')));
+      await Future<void>.delayed(const Duration(milliseconds: 80));
+    });
+    await _pumpFrames(tester, 20);
+    expect(find.text('この動作は何ですか？'), findsOneWidget);
+    await tester.enterText(
+      find.byKey(const Key('pose-movement-field')),
+      'スノーボード 10mキッカー バックサイド720',
+    );
+    await tester.tap(find.byKey(const Key('pose-movement-confirm')));
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 80)),
+    );
+    await _pumpFrames(tester, 20);
+
+    expect(sharer.fileName, 'sukashi-pose_0719_a.json');
+    expect(sharer.contents, contains(poseExportSchema));
+    expect(sharer.contents, contains('"kind": "motion-landmarks"'));
+    expect(sharer.contents, contains('バックサイド720'));
+    expect(sharer.contents, contains('"leftKnee"'));
   });
 }
 
@@ -708,6 +771,21 @@ class _MemoryPoseCache extends PoseCacheRepository {
   @override
   Future<void> save(String clipId, Map<String, PoseFrame> frames) async {
     _store[clipId] = Map<String, PoseFrame>.of(frames);
+  }
+}
+
+class _RecordingPoseExportSharer implements PoseExportSharer {
+  String? fileName;
+  String? contents;
+
+  @override
+  Future<void> shareJsonFile({
+    required String fileName,
+    required String contents,
+    Rect? sharePositionOrigin,
+  }) async {
+    this.fileName = fileName;
+    this.contents = contents;
   }
 }
 

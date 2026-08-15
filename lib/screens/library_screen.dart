@@ -9,8 +9,10 @@ import 'package:image_picker/image_picker.dart';
 
 import '../models/clip.dart' as model;
 import '../providers/clip_providers.dart';
+import '../pose/pose_movement_dialog.dart';
+import '../providers/pose_providers.dart';
 
-enum _ClipAction { selectRange, extractFrames, editMemo, delete }
+enum _ClipAction { selectRange, exportPose, extractFrames, editMemo, delete }
 
 typedef ThumbnailWidgetBuilder = Widget Function(String path, Key key);
 
@@ -168,6 +170,14 @@ class _ClipGrid extends ConsumerWidget {
                 title: const Text('比較範囲を選択'),
                 onTap: () => Navigator.pop(context, _ClipAction.selectRange),
               ),
+            if (!clip.isBroken)
+              ListTile(
+                key: Key('export-pose-${clip.id}'),
+                leading: const Icon(Icons.download_outlined),
+                title: const Text('座標を保存'),
+                subtitle: const Text('この1本だけをJSONで書き出します'),
+                onTap: () => Navigator.pop(context, _ClipAction.exportPose),
+              ),
             if (kDebugMode)
               ListTile(
                 leading: const Icon(Icons.photo_library_outlined),
@@ -194,6 +204,8 @@ class _ClipGrid extends ConsumerWidget {
     switch (action) {
       case _ClipAction.selectRange:
         await context.push('/comparison-range/${clip.id}');
+      case _ClipAction.exportPose:
+        await _exportPose(context, ref, clip);
       case _ClipAction.extractFrames:
         await context.push('/debug/frame-extraction/${clip.id}');
       case _ClipAction.editMemo:
@@ -201,6 +213,89 @@ class _ClipGrid extends ConsumerWidget {
       case _ClipAction.delete:
         await _confirmDelete(context, ref, clip);
     }
+  }
+
+  Future<void> _exportPose(
+    BuildContext context,
+    WidgetRef ref,
+    model.Clip clip,
+  ) async {
+    if (clip.durationMs > 10000 && !clip.hasComparisonRange) {
+      final choose = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('比較範囲が必要です'),
+          content: const Text('10秒を超えるクリップは、切り取った範囲の座標だけを1本分保存します。'),
+          actions: <Widget>[
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('キャンセル'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('範囲を選択'),
+            ),
+          ],
+        ),
+      );
+      if (choose == true && context.mounted) {
+        await context.push('/comparison-range/${clip.id}');
+      }
+      return;
+    }
+
+    final movement = await askPoseMovement(context);
+    if (!context.mounted || movement == null) {
+      return;
+    }
+
+    final dialog = showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) {
+        return const AlertDialog(
+          content: Row(
+            children: <Widget>[
+              CircularProgressIndicator(),
+              SizedBox(width: 16),
+              Expanded(
+                child: Text(
+                  'この1本の座標を準備しています…',
+                  key: Key('pose-export-progress'),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+
+    try {
+      final box = context.findRenderObject() as RenderBox?;
+      await ref
+          .read(poseClipExporterProvider)
+          .exportClip(
+            clip,
+            movement: movement,
+            sharePositionOrigin: box == null
+                ? null
+                : box.localToGlobal(Offset.zero) & box.size,
+          );
+    } on Object catch (error) {
+      if (context.mounted) {
+        final message = error is FormatException
+            ? error.message
+            : '座標データの保存に失敗しました。';
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(message)));
+      }
+    } finally {
+      if (context.mounted) {
+        Navigator.of(context, rootNavigator: true).pop();
+      }
+    }
+    await dialog;
   }
 
   Future<void> _editMemo(

@@ -13,6 +13,9 @@ import '../models/app_settings.dart';
 import '../models/clip.dart';
 import '../models/comparison_pair.dart';
 import '../pose/pose_analysis_service.dart';
+import '../pose/pose_export.dart';
+import '../pose/pose_export_sharer.dart';
+import '../pose/pose_movement_dialog.dart';
 import '../pose/pose_model.dart';
 import '../pose/pose_skeleton_painter.dart';
 import '../providers/clip_providers.dart';
@@ -266,7 +269,6 @@ class _CompareScreenState extends ConsumerState<CompareScreen>
       _poseAnalyzing = true;
       _poseProgressLabel = '骨格解析を準備しています…';
     });
-    final service = ref.read(poseAnalysisServiceProvider);
     try {
       var clipIndex = 0;
       for (final track in <ComparisonTrack>[
@@ -277,33 +279,11 @@ class _CompareScreenState extends ConsumerState<CompareScreen>
           return;
         }
         clipIndex += 1;
-        final session = service.analyzeClip(
-          clipId: track.clipId,
-          framePaths: track.frames.map((frame) => frame.path).toList(),
+        await _analyzeTrack(
+          track,
+          sessionId: sessionId,
+          progressLabel: '骨格解析 $clipIndex/2',
         );
-        final subscription = session.progress.listen((progress) {
-          if (!mounted || sessionId != _poseSession) {
-            return;
-          }
-          setState(() {
-            _poseProgressLabel =
-                '骨格解析 $clipIndex/2: '
-                '${progress.completed}/${progress.total}';
-          });
-        });
-        final result = await session.result;
-        await subscription.cancel();
-        if (!mounted || sessionId != _poseSession) {
-          return;
-        }
-        setState(() {
-          for (final frame in track.frames) {
-            final pose = result[PoseAnalysisService.keyForPath(frame.path)];
-            if (pose != null) {
-              _poses[frame.path] = pose;
-            }
-          }
-        });
       }
     } on Object {
       if (mounted && sessionId == _poseSession) {
@@ -321,6 +301,121 @@ class _CompareScreenState extends ConsumerState<CompareScreen>
           _poseProgressLabel = detected == 0
               ? '骨格を検出できませんでした'
               : '骨格 $detected コマ検出';
+        });
+      }
+    }
+  }
+
+  Future<void> _analyzeTrack(
+    ComparisonTrack track, {
+    required int sessionId,
+    required String progressLabel,
+  }) async {
+    final service = ref.read(poseAnalysisServiceProvider);
+    final session = service.analyzeClip(
+      clipId: track.clipId,
+      framePaths: track.frames.map((frame) => frame.path).toList(),
+    );
+    final subscription = session.progress.listen((progress) {
+      if (!mounted || sessionId != _poseSession) {
+        return;
+      }
+      setState(() {
+        _poseProgressLabel =
+            '$progressLabel: ${progress.completed}/${progress.total}';
+      });
+    });
+    final result = await session.result;
+    await subscription.cancel();
+    if (!mounted || sessionId != _poseSession) {
+      return;
+    }
+    setState(() {
+      for (final frame in track.frames) {
+        final pose =
+            result[frame.path] ??
+            result[PoseAnalysisService.keyForPath(frame.path)];
+        if (pose != null) {
+          _poses[frame.path] = pose;
+        }
+      }
+    });
+  }
+
+  Clip? _clipById(String clipId) {
+    final clips = ref.read(clipListProvider).value;
+    if (clips == null) {
+      return null;
+    }
+    for (final clip in clips) {
+      if (clip.id == clipId) {
+        return clip;
+      }
+    }
+    return null;
+  }
+
+  Future<void> _exportPoseTrack(
+    ComparisonTrack track, {
+    required Rect? sharePositionOrigin,
+  }) async {
+    final clip = _clipById(track.clipId);
+    if (clip == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('クリップ情報を取得できませんでした。')));
+      }
+      return;
+    }
+    final movement = await askPoseMovement(context);
+    if (!mounted || movement == null) {
+      return;
+    }
+    final sessionId = ++_poseSession;
+    setState(() {
+      _poseAnalyzing = true;
+      _poseProgressLabel = '座標データを準備しています…';
+    });
+    try {
+      await _analyzeTrack(track, sessionId: sessionId, progressLabel: '座標書き出し');
+      if (!mounted || sessionId != _poseSession) {
+        return;
+      }
+      await ref
+          .read(poseExportSharerProvider)
+          .shareJsonFile(
+            fileName: poseExportFileName(clip),
+            contents: encodePoseMotionDocument(
+              buildPoseMotionDocument(
+                clip: clip,
+                track: track,
+                posesByPath: _poses,
+                movement: movement,
+              ),
+            ),
+            sharePositionOrigin: sharePositionOrigin,
+          );
+    } on Object {
+      if (mounted && sessionId == _poseSession) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('座標データの書き出しに失敗しました。')));
+      }
+    } finally {
+      if (mounted && sessionId == _poseSession) {
+        final detected = _poses.values
+            .where((pose) => pose.landmarks.isNotEmpty)
+            .length;
+        setState(() {
+          _poseAnalyzing = false;
+          if (_poseEnabled) {
+            _poseProgressLabel = detected == 0
+                ? '骨格を検出できませんでした'
+                : '骨格 $detected コマ検出';
+          } else {
+            _poseProgressLabel = '';
+          }
         });
       }
     }
@@ -941,7 +1036,9 @@ class _CompareScreenState extends ConsumerState<CompareScreen>
         '位置合わせでは、ドラッグで移動、ピンチで拡大縮小、2本指で回転できます。\n'
         '透過の操作対象と比較グリッドは、設定から選べます。\n\n'
         '骨格表示をオンにすると、端末内だけで頭・肩・腰・膝・足元の点を推定し、'
-        '関節角度を表示します。映像は外部へ送信されません。',
+        '関節角度を表示します。映像は外部へ送信されません。\n\n'
+        '座標の保存は1本ずつです。保存の前に「この動作は何ですか？」と聞きます。'
+        '種目と技を書くと、AIが座標の意味を読みやすくなります。'
       ),
       actions: <Widget>[
         TextButton(
@@ -1135,6 +1232,65 @@ class _CompareScreenState extends ConsumerState<CompareScreen>
                       value: _poseEnabled,
                       onChanged: (enabled) =>
                           unawaited(_setPoseEnabled(enabled, controller)),
+                    ),
+                  ),
+                  _settingsRow(
+                    label: '座標保存',
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: <Widget>[
+                        const Text(
+                          '1本ずつJSONを保存します。保存前に動作の説明を書けます。',
+                          style: TextStyle(fontSize: 12),
+                        ),
+                        const SizedBox(height: 8),
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 6,
+                          children: <Widget>[
+                            FilledButton.tonal(
+                              key: const Key('pose-export-a'),
+                              onPressed: _poseAnalyzing
+                                  ? null
+                                  : () {
+                                      final box =
+                                          sheetContext.findRenderObject()
+                                              as RenderBox?;
+                                      unawaited(
+                                        _exportPoseTrack(
+                                          controller.trackA,
+                                          sharePositionOrigin: box == null
+                                              ? null
+                                              : box.localToGlobal(Offset.zero) &
+                                                    box.size,
+                                        ),
+                                      );
+                                    },
+                              child: const Text('Aを保存'),
+                            ),
+                            FilledButton.tonal(
+                              key: const Key('pose-export-b'),
+                              onPressed: _poseAnalyzing
+                                  ? null
+                                  : () {
+                                      final box =
+                                          sheetContext.findRenderObject()
+                                              as RenderBox?;
+                                      unawaited(
+                                        _exportPoseTrack(
+                                          controller.trackB,
+                                          sharePositionOrigin: box == null
+                                              ? null
+                                              : box.localToGlobal(Offset.zero) &
+                                                    box.size,
+                                        ),
+                                      );
+                                    },
+                              child: const Text('Bを保存'),
+                            ),
+                          ],
+                        ),
+                      ],
                     ),
                   ),
                   _settingsRow(
