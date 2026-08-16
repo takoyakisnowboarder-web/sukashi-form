@@ -1050,7 +1050,7 @@ class _CompareScreenState extends ConsumerState<CompareScreen>
         '骨格表示をオンにすると、端末内だけで頭・肩・腰・膝・足元の点を推定し、'
         '関節角度を表示します。映像は外部へ送信されません。\n\n'
         '座標の保存は1本ずつです。保存の前に「この動作は何ですか？」と聞きます。'
-        '種目と技を書くと、AIが座標の意味を読みやすくなります。'
+        '種目と技を書くと、AIが座標の意味を読みやすくなります。',
       ),
       actions: <Widget>[
         TextButton(
@@ -1075,290 +1075,313 @@ class _CompareScreenState extends ConsumerState<CompareScreen>
       context: context,
       isScrollControlled: true,
       showDragHandle: true,
-      builder: (sheetContext) => StatefulBuilder(
-        builder: (context, setSheetState) {
-          void refresh(VoidCallback change) {
-            setState(change);
-            setSheetState(() {});
-          }
+      enableDrag: true,
+      builder: (sheetContext) {
+        // 透過は項目が多く、高さ制限がないとシートが全画面になって
+        // 比較画面の戻るボタンが隠れる。分割と同じく下からのシャッターにする。
+        final maxHeight = MediaQuery.sizeOf(sheetContext).height * 0.72;
+        return StatefulBuilder(
+          builder: (context, setSheetState) {
+            void refresh(VoidCallback change) {
+              setState(change);
+              setSheetState(() {});
+            }
 
-          return SafeArea(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
-              child: Column(
-                key: const Key('comparison-settings-sheet'),
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: <Widget>[
-                  Text('比較設定', style: Theme.of(context).textTheme.titleLarge),
-                  const SizedBox(height: 8),
-                  _settingsRow(
-                    label: '再生',
-                    child: Align(
-                      alignment: Alignment.centerLeft,
-                      child: FilterChip(
-                        key: const Key('loop-toggle'),
-                        label: const Text('ループ'),
-                        selected: controller.loop,
-                        onSelected: (value) =>
-                            refresh(() => controller.setLoop(value)),
+            return SafeArea(
+              child: ConstrainedBox(
+                constraints: BoxConstraints(maxHeight: maxHeight),
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+                  child: Column(
+                    key: const Key('comparison-settings-sheet'),
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: <Widget>[
+                      Text(
+                        '比較設定',
+                        style: Theme.of(context).textTheme.titleLarge,
                       ),
-                    ),
-                  ),
-                  _settingsRow(
-                    label: '速度',
-                    child: SegmentedButton<double>(
-                      key: const Key('speed-selector'),
-                      // 選択中はチェックアイコンが入る分だけ幅が減るため、
-                      // ラベルを短く保たないと末尾が切れる(「1.0x」→「1.0」)。
-                      // softWrap:false は折り返しも防ぐ。
-                      showSelectedIcon: false,
-                      segments: const <ButtonSegment<double>>[
-                        ButtonSegment(
-                          value: 0.25,
-                          label: Text('0.25x', softWrap: false),
+                      const SizedBox(height: 8),
+                      _settingsRow(
+                        label: '再生',
+                        child: Align(
+                          alignment: Alignment.centerLeft,
+                          child: FilterChip(
+                            key: const Key('loop-toggle'),
+                            label: const Text('ループ'),
+                            selected: controller.loop,
+                            onSelected: (value) =>
+                                refresh(() => controller.setLoop(value)),
+                          ),
                         ),
-                        ButtonSegment(
-                          value: 0.5,
-                          label: Text('0.5x', softWrap: false),
-                        ),
-                        ButtonSegment(
-                          value: 1,
-                          label: Text('1.0x', softWrap: false),
-                        ),
-                      ],
-                      selected: <double>{controller.speed},
-                      onSelectionChanged: (selection) =>
-                          refresh(() => controller.setSpeed(selection.single)),
-                    ),
-                  ),
-                  if (_displayMode == ComparisonDisplayMode.overlay)
-                    _settingsRow(
-                      label: 'B 透過',
-                      child: Row(
-                        children: <Widget>[
-                          Expanded(
-                            child: Slider(
-                              key: const Key('overlay-opacity-slider'),
-                              value: _overlayOpacity,
-                              divisions: 20,
-                              onChanged: (value) =>
-                                  refresh(() => _overlayOpacity = value),
-                              onChangeEnd: (_) =>
-                                  unawaited(_savePair(controller)),
+                      ),
+                      _settingsRow(
+                        label: '速度',
+                        child: SegmentedButton<double>(
+                          key: const Key('speed-selector'),
+                          // 選択中はチェックアイコンが入る分だけ幅が減るため、
+                          // ラベルを短く保たないと末尾が切れる(「1.0x」→「1.0」)。
+                          // softWrap:false は折り返しも防ぐ。
+                          showSelectedIcon: false,
+                          segments: const <ButtonSegment<double>>[
+                            ButtonSegment(
+                              value: 0.25,
+                              label: Text('0.25x', softWrap: false),
                             ),
+                            ButtonSegment(
+                              value: 0.5,
+                              label: Text('0.5x', softWrap: false),
+                            ),
+                            ButtonSegment(
+                              value: 1,
+                              label: Text('1.0x', softWrap: false),
+                            ),
+                          ],
+                          selected: <double>{controller.speed},
+                          onSelectionChanged: (selection) => refresh(
+                            () => controller.setSpeed(selection.single),
                           ),
-                          SizedBox(
-                            width: 44,
-                            child: Text('${(_overlayOpacity * 100).round()}%'),
-                          ),
-                        ],
+                        ),
                       ),
-                    ),
-                  if (_displayMode == ComparisonDisplayMode.split)
-                    _settingsRow(
-                      label: '分割方向',
-                      child: SegmentedButton<ComparisonSplitAxis>(
-                        key: const Key('split-axis-selector'),
-                        segments: const <ButtonSegment<ComparisonSplitAxis>>[
-                          ButtonSegment(
-                            value: ComparisonSplitAxis.vertical,
-                            label: Text('上下'),
-                          ),
-                          ButtonSegment(
-                            value: ComparisonSplitAxis.horizontal,
-                            label: Text('左右'),
-                          ),
-                        ],
-                        selected: <ComparisonSplitAxis>{_splitAxis},
-                        onSelectionChanged: (selection) {
-                          refresh(() => _splitAxis = selection.single);
-                          unawaited(_savePair(controller));
-                        },
-                      ),
-                    ),
-                  _settingsRow(
-                    label: '比較グリッド',
-                    child: Switch(
-                      key: const Key('comparison-grid-toggle'),
-                      value: _gridType != CameraGridType.none,
-                      onChanged: (enabled) {
-                        refresh(
-                          () => _gridType = enabled
-                              ? CameraGridType.grid3x3
-                              : CameraGridType.none,
-                        );
-                        unawaited(_savePair(controller));
-                      },
-                    ),
-                  ),
-                  if (_gridType != CameraGridType.none)
-                    _settingsRow(
-                      label: 'グリッド種類',
-                      child: Wrap(
-                        spacing: 8,
-                        runSpacing: 6,
-                        children: CameraGridType.values
-                            .where((type) => type != CameraGridType.none)
-                            .map(
-                              (type) => ChoiceChip(
-                                key: Key('comparison-grid-type-${type.name}'),
-                                label: Text(type.label),
-                                selected: _gridType == type,
-                                onSelected: (_) {
-                                  refresh(() => _gridType = type);
-                                  unawaited(_savePair(controller));
-                                },
+                      if (_displayMode == ComparisonDisplayMode.overlay)
+                        _settingsRow(
+                          label: 'B 透過',
+                          child: Row(
+                            children: <Widget>[
+                              Expanded(
+                                child: Slider(
+                                  key: const Key('overlay-opacity-slider'),
+                                  value: _overlayOpacity,
+                                  divisions: 20,
+                                  onChanged: (value) =>
+                                      refresh(() => _overlayOpacity = value),
+                                  onChangeEnd: (_) =>
+                                      unawaited(_savePair(controller)),
+                                ),
                               ),
-                            )
-                            .toList(),
-                      ),
-                    ),
-                  if (_displayMode == ComparisonDisplayMode.overlay)
-                    _settingsRow(
-                      label: '操作対象',
-                      child: SegmentedButton<String>(
-                        key: const Key('alignment-target-settings'),
-                        showSelectedIcon: false,
-                        segments: <ButtonSegment<String>>[
-                          ButtonSegment(
-                            value: controller.trackA.clipId,
-                            label: const Text('A'),
+                              SizedBox(
+                                width: 44,
+                                child: Text(
+                                  '${(_overlayOpacity * 100).round()}%',
+                                ),
+                              ),
+                            ],
                           ),
-                          ButtonSegment(
-                            value: controller.trackB.clipId,
-                            label: const Text('B'),
+                        ),
+                      if (_displayMode == ComparisonDisplayMode.split)
+                        _settingsRow(
+                          label: '分割方向',
+                          child: SegmentedButton<ComparisonSplitAxis>(
+                            key: const Key('split-axis-selector'),
+                            segments:
+                                const <ButtonSegment<ComparisonSplitAxis>>[
+                                  ButtonSegment(
+                                    value: ComparisonSplitAxis.vertical,
+                                    label: Text('上下'),
+                                  ),
+                                  ButtonSegment(
+                                    value: ComparisonSplitAxis.horizontal,
+                                    label: Text('左右'),
+                                  ),
+                                ],
+                            selected: <ComparisonSplitAxis>{_splitAxis},
+                            onSelectionChanged: (selection) {
+                              refresh(() => _splitAxis = selection.single);
+                              unawaited(_savePair(controller));
+                            },
                           ),
-                        ],
-                        selected: <String>{
-                          _alignmentTargetClipId ?? controller.trackB.clipId,
-                        },
-                        onSelectionChanged: (selection) => refresh(
-                          () => _alignmentTargetClipId = selection.single,
+                        ),
+                      _settingsRow(
+                        label: '比較グリッド',
+                        child: Switch(
+                          key: const Key('comparison-grid-toggle'),
+                          value: _gridType != CameraGridType.none,
+                          onChanged: (enabled) {
+                            refresh(
+                              () => _gridType = enabled
+                                  ? CameraGridType.grid3x3
+                                  : CameraGridType.none,
+                            );
+                            unawaited(_savePair(controller));
+                          },
                         ),
                       ),
-                    ),
-                  _settingsRow(
-                    label: '骨格表示',
-                    child: Switch(
-                      key: const Key('pose-overlay-toggle'),
-                      value: _poseEnabled,
-                      onChanged: (enabled) =>
-                          unawaited(_setPoseEnabled(enabled, controller)),
-                    ),
-                  ),
-                  _settingsRow(
-                    label: '座標保存',
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: <Widget>[
-                        const Text(
-                          '1本ずつJSONを保存します。保存前に動作の説明を書けます。',
-                          style: TextStyle(fontSize: 12),
-                        ),
-                        const SizedBox(height: 8),
-                        Wrap(
-                          spacing: 8,
-                          runSpacing: 6,
-                          children: <Widget>[
-                            FilledButton.tonal(
-                              key: const Key('pose-export-a'),
-                              onPressed: _poseAnalyzing
-                                  ? null
-                                  : () {
-                                      final box =
-                                          sheetContext.findRenderObject()
-                                              as RenderBox?;
-                                      unawaited(
-                                        _exportPoseTrack(
-                                          controller.trackA,
-                                          sharePositionOrigin: box == null
-                                              ? null
-                                              : box.localToGlobal(Offset.zero) &
-                                                    box.size,
-                                        ),
-                                      );
+                      if (_gridType != CameraGridType.none)
+                        _settingsRow(
+                          label: 'グリッド種類',
+                          child: Wrap(
+                            spacing: 8,
+                            runSpacing: 6,
+                            children: CameraGridType.values
+                                .where((type) => type != CameraGridType.none)
+                                .map(
+                                  (type) => ChoiceChip(
+                                    key: Key(
+                                      'comparison-grid-type-${type.name}',
+                                    ),
+                                    label: Text(type.label),
+                                    selected: _gridType == type,
+                                    onSelected: (_) {
+                                      refresh(() => _gridType = type);
+                                      unawaited(_savePair(controller));
                                     },
-                              child: const Text('Aを保存'),
+                                  ),
+                                )
+                                .toList(),
+                          ),
+                        ),
+                      if (_displayMode == ComparisonDisplayMode.overlay)
+                        _settingsRow(
+                          label: '操作対象',
+                          child: SegmentedButton<String>(
+                            key: const Key('alignment-target-settings'),
+                            showSelectedIcon: false,
+                            segments: <ButtonSegment<String>>[
+                              ButtonSegment(
+                                value: controller.trackA.clipId,
+                                label: const Text('A'),
+                              ),
+                              ButtonSegment(
+                                value: controller.trackB.clipId,
+                                label: const Text('B'),
+                              ),
+                            ],
+                            selected: <String>{
+                              _alignmentTargetClipId ??
+                                  controller.trackB.clipId,
+                            },
+                            onSelectionChanged: (selection) => refresh(
+                              () => _alignmentTargetClipId = selection.single,
                             ),
-                            FilledButton.tonal(
-                              key: const Key('pose-export-b'),
-                              onPressed: _poseAnalyzing
-                                  ? null
-                                  : () {
-                                      final box =
-                                          sheetContext.findRenderObject()
-                                              as RenderBox?;
-                                      unawaited(
-                                        _exportPoseTrack(
-                                          controller.trackB,
-                                          sharePositionOrigin: box == null
-                                              ? null
-                                              : box.localToGlobal(Offset.zero) &
-                                                    box.size,
-                                        ),
-                                      );
-                                    },
-                              child: const Text('Bを保存'),
+                          ),
+                        ),
+                      _settingsRow(
+                        label: '骨格表示',
+                        child: Switch(
+                          key: const Key('pose-overlay-toggle'),
+                          value: _poseEnabled,
+                          onChanged: (enabled) =>
+                              unawaited(_setPoseEnabled(enabled, controller)),
+                        ),
+                      ),
+                      _settingsRow(
+                        label: '座標保存',
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: <Widget>[
+                            const Text(
+                              '1本ずつJSONを保存します。保存前に動作の説明を書けます。',
+                              style: TextStyle(fontSize: 12),
+                            ),
+                            const SizedBox(height: 8),
+                            Wrap(
+                              spacing: 8,
+                              runSpacing: 6,
+                              children: <Widget>[
+                                FilledButton.tonal(
+                                  key: const Key('pose-export-a'),
+                                  onPressed: _poseAnalyzing
+                                      ? null
+                                      : () {
+                                          final box =
+                                              sheetContext.findRenderObject()
+                                                  as RenderBox?;
+                                          unawaited(
+                                            _exportPoseTrack(
+                                              controller.trackA,
+                                              sharePositionOrigin: box == null
+                                                  ? null
+                                                  : box.localToGlobal(
+                                                          Offset.zero,
+                                                        ) &
+                                                        box.size,
+                                            ),
+                                          );
+                                        },
+                                  child: const Text('Aを保存'),
+                                ),
+                                FilledButton.tonal(
+                                  key: const Key('pose-export-b'),
+                                  onPressed: _poseAnalyzing
+                                      ? null
+                                      : () {
+                                          final box =
+                                              sheetContext.findRenderObject()
+                                                  as RenderBox?;
+                                          unawaited(
+                                            _exportPoseTrack(
+                                              controller.trackB,
+                                              sharePositionOrigin: box == null
+                                                  ? null
+                                                  : box.localToGlobal(
+                                                          Offset.zero,
+                                                        ) &
+                                                        box.size,
+                                            ),
+                                          );
+                                        },
+                                  child: const Text('Bを保存'),
+                                ),
+                              ],
                             ),
                           ],
                         ),
-                      ],
-                    ),
-                  ),
-                  _settingsRow(
-                    label: '位置合わせ',
-                    child: Align(
-                      alignment: Alignment.centerLeft,
-                      child: FilledButton.tonalIcon(
-                        key: const Key('alignment-mode-toggle'),
-                        onPressed: _alignmentMode
-                            ? null
-                            : () {
-                                Navigator.pop(sheetContext);
-                                setState(() {
-                                  controller.setPlaying(false);
-                                  _alignmentTargetClipId ??=
-                                      controller.trackB.clipId;
-                                  _alignmentMode = true;
-                                });
-                              },
-                        icon: const Icon(Icons.open_with),
-                        label: Text(_alignmentMode ? '位置合わせ中' : '位置合わせを開始'),
                       ),
-                    ),
-                  ),
-                  _settingsRow(
-                    label: '同期',
-                    child: Wrap(
-                      crossAxisAlignment: WrapCrossAlignment.center,
-                      spacing: 8,
-                      children: <Widget>[
-                        Text(
-                          controller.hasSynchronizedReference
-                              ? '✓ 同期済み'
-                              : '先頭を基準に同期',
-                        ),
-                        TextButton(
-                          key: const Key('start-reference'),
-                          onPressed: () {
-                            Navigator.pop(sheetContext);
-                            _beginReference(controller);
-                          },
-                          child: Text(
-                            controller.hasSynchronizedReference
-                                ? '基準を取り直す'
-                                : '基準を合わせる',
+                      _settingsRow(
+                        label: '位置合わせ',
+                        child: Align(
+                          alignment: Alignment.centerLeft,
+                          child: FilledButton.tonalIcon(
+                            key: const Key('alignment-mode-toggle'),
+                            onPressed: _alignmentMode
+                                ? null
+                                : () {
+                                    Navigator.pop(sheetContext);
+                                    setState(() {
+                                      controller.setPlaying(false);
+                                      _alignmentTargetClipId ??=
+                                          controller.trackB.clipId;
+                                      _alignmentMode = true;
+                                    });
+                                  },
+                            icon: const Icon(Icons.open_with),
+                            label: Text(_alignmentMode ? '位置合わせ中' : '位置合わせを開始'),
                           ),
                         ),
-                      ],
-                    ),
+                      ),
+                      _settingsRow(
+                        label: '同期',
+                        child: Wrap(
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          spacing: 8,
+                          children: <Widget>[
+                            Text(
+                              controller.hasSynchronizedReference
+                                  ? '✓ 同期済み'
+                                  : '先頭を基準に同期',
+                            ),
+                            TextButton(
+                              key: const Key('start-reference'),
+                              onPressed: () {
+                                Navigator.pop(sheetContext);
+                                _beginReference(controller);
+                              },
+                              child: Text(
+                                controller.hasSynchronizedReference
+                                    ? '基準を取り直す'
+                                    : '基準を合わせる',
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
                   ),
-                ],
+                ),
               ),
-            ),
-          );
-        },
-      ),
+            );
+          },
+        );
+      },
     );
   }
 

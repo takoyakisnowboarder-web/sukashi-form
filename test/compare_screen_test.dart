@@ -189,7 +189,7 @@ void main() {
         .value;
 
     await _openSettings(tester);
-    await tester.tap(find.byKey(const Key('alignment-mode-toggle')));
+    await _tapSheet(tester, find.byKey(const Key('alignment-mode-toggle')));
     await _pumpFrames(tester, 15);
     expect(find.byKey(const Key('comparison-seek')), findsNothing);
     expect(find.byKey(const Key('reset-alignment')), findsOneWidget);
@@ -279,7 +279,7 @@ void main() {
     );
     await _pumpFrames(tester, 20);
     await _openSettings(tester);
-    await tester.tap(find.byKey(const Key('alignment-mode-toggle')));
+    await _tapSheet(tester, find.byKey(const Key('alignment-mode-toggle')));
     await _pumpFrames(tester, 15);
     await tester.drag(
       find.byKey(const Key('alignment-gesture-area')),
@@ -316,7 +316,7 @@ void main() {
     );
     await _pumpFrames(tester, 20);
     await _openSettings(tester);
-    await tester.tap(find.byKey(const Key('alignment-mode-toggle')));
+    await _tapSheet(tester, find.byKey(const Key('alignment-mode-toggle')));
     await _pumpFrames(tester, 15);
 
     final area = find.byKey(const Key('alignment-gesture-area'));
@@ -402,7 +402,7 @@ void main() {
     await tester.tap(find.text('分割'));
     await tester.pump();
     await _openSettings(tester);
-    await tester.tap(find.byKey(const Key('alignment-mode-toggle')));
+    await _tapSheet(tester, find.byKey(const Key('alignment-mode-toggle')));
     await _pumpFrames(tester, 15);
 
     final area = find.byKey(const Key('alignment-gesture-area'));
@@ -449,9 +449,9 @@ void main() {
       matching: find.text('A'),
     );
     expect(targetA, findsOneWidget);
-    await tester.tap(targetA);
+    await _tapSheet(tester, targetA);
     await tester.pump();
-    await tester.tap(find.byKey(const Key('alignment-mode-toggle')));
+    await _tapSheet(tester, find.byKey(const Key('alignment-mode-toggle')));
     await _pumpFrames(tester, 15);
 
     expect(find.byKey(const Key('alignment-target-selector')), findsNothing);
@@ -492,14 +492,14 @@ void main() {
     await _pumpFrames(tester, 20);
 
     await _openSettings(tester);
-    await tester.tap(find.byKey(const Key('alignment-mode-toggle')));
+    await _tapSheet(tester, find.byKey(const Key('alignment-mode-toggle')));
     await _pumpFrames(tester, 15);
     await _openSettings(tester);
     final targetA = find.descendant(
       of: find.byKey(const Key('alignment-target-settings')),
       matching: find.text('A'),
     );
-    await tester.tap(targetA);
+    await _tapSheet(tester, targetA);
     await tester.pump();
     await tester.tapAt(const Offset(10, 10));
     await _pumpFrames(tester, 15);
@@ -548,7 +548,7 @@ void main() {
     await tester.tap(find.byKey(const Key('comparison-grid-type-cross')));
     await tester.pump();
     await tester.ensureVisible(find.byKey(const Key('alignment-mode-toggle')));
-    await tester.tap(find.byKey(const Key('alignment-mode-toggle')));
+    await _tapSheet(tester, find.byKey(const Key('alignment-mode-toggle')));
     await _pumpFrames(tester, 15);
 
     expect(find.byType(GridOverlay), findsOneWidget);
@@ -668,6 +668,12 @@ void main() {
 Future<void> _openSettings(WidgetTester tester) async {
   await tester.tap(find.byKey(const Key('comparison-settings')));
   await _pumpFrames(tester, 15);
+}
+
+Future<void> _tapSheet(WidgetTester tester, Finder finder) async {
+  await tester.ensureVisible(finder);
+  await tester.pump();
+  await tester.tap(finder);
 }
 
 Future<void> _pump(
