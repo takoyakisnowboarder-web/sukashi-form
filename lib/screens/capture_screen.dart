@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../capture/camera_zoom.dart';
 import '../capture/capture_session_machine.dart';
 import '../capture/grid_overlay.dart';
 import '../models/app_settings.dart';
@@ -30,6 +31,8 @@ class _CaptureScreenState extends ConsumerState<CaptureScreen>
   bool _isInitializing = true;
   bool _isSaving = false;
   bool _gallerySaveSupported = false;
+  CameraZoom _zoom = CameraZoom.unset;
+  double _zoomAtGestureStart = 1;
   late final CaptureDeviceBridge _deviceBridge;
   late final RecordedVideoSaver _recordedVideoSaver;
 
@@ -116,6 +119,9 @@ class _CaptureScreenState extends ConsumerState<CaptureScreen>
       );
       await controller.initialize();
       await controller.lockCaptureOrientation(DeviceOrientation.portraitUp);
+      final minZoom = await controller.getMinZoomLevel();
+      final maxZoom = await controller.getMaxZoomLevel();
+      await controller.setZoomLevel(minZoom);
       if (!mounted) {
         await controller.dispose();
         return;
@@ -123,7 +129,11 @@ class _CaptureScreenState extends ConsumerState<CaptureScreen>
       final previous = _cameraController;
       _cameraController = controller;
       await previous?.dispose();
-      setState(() => _isInitializing = false);
+      setState(() {
+        _isInitializing = false;
+        _zoom = CameraZoom(min: minZoom, max: maxZoom, current: minZoom);
+        _zoomAtGestureStart = minZoom;
+      });
     } on CameraException catch (error) {
       if (mounted) {
         setState(() {
@@ -146,7 +156,42 @@ class _CaptureScreenState extends ConsumerState<CaptureScreen>
     _cameraController = null;
     await controller?.dispose();
     if (mounted) {
-      setState(() {});
+      setState(() => _zoom = CameraZoom.unset);
+    }
+  }
+
+  void _onZoomStart(ScaleStartDetails details) {
+    _zoomAtGestureStart = _zoom.current;
+  }
+
+  void _onZoomUpdate(ScaleUpdateDetails details) {
+    if (details.pointerCount < 2 || !_zoom.canZoom) {
+      return;
+    }
+    final next = zoomAfterPinch(
+      startZoom: _zoomAtGestureStart,
+      scale: details.scale,
+      min: _zoom.min,
+      max: _zoom.max,
+    );
+    unawaited(_applyZoom(next));
+  }
+
+  Future<void> _applyZoom(double next) async {
+    if ((next - _zoom.current).abs() < 0.01) {
+      return;
+    }
+    final controller = _cameraController;
+    if (controller == null || !controller.value.isInitialized) {
+      return;
+    }
+    try {
+      await controller.setZoomLevel(next);
+      if (mounted) {
+        setState(() => _zoom = _zoom.copyWith(current: next));
+      }
+    } on CameraException {
+      // Keep the last applied zoom if the device rejects an intermediate value.
     }
   }
 
@@ -320,19 +365,34 @@ class _CaptureScreenState extends ConsumerState<CaptureScreen>
                         .read(appSettingsProvider.notifier)
                         .setSaveToGallery(enabled),
                   ),
-                  const Spacer(),
-                  if (_session.phase == CapturePhase.countingDown)
-                    Text(
-                      '${_session.countdownRemaining}',
-                      key: const Key('countdown-display'),
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 96,
-                        fontWeight: FontWeight.bold,
-                        shadows: <Shadow>[Shadow(blurRadius: 8)],
+                  Expanded(
+                    child: GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onScaleStart: _onZoomStart,
+                      onScaleUpdate: _onZoomUpdate,
+                      child: Stack(
+                        alignment: Alignment.center,
+                        children: <Widget>[
+                          if (_session.phase == CapturePhase.countingDown)
+                            Text(
+                              '${_session.countdownRemaining}',
+                              key: const Key('countdown-display'),
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 96,
+                                fontWeight: FontWeight.bold,
+                                shadows: <Shadow>[Shadow(blurRadius: 8)],
+                              ),
+                            ),
+                          if (_zoom.canZoom)
+                            Positioned(
+                              bottom: 16,
+                              child: _ZoomBadge(label: _zoom.label),
+                            ),
+                        ],
                       ),
                     ),
-                  const Spacer(),
+                  ),
                   _CaptureControls(
                     settings: settings,
                     phase: _session.phase,
@@ -348,6 +408,33 @@ class _CaptureScreenState extends ConsumerState<CaptureScreen>
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ZoomBadge extends StatelessWidget {
+  const _ZoomBadge({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: Colors.black54,
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        child: Text(
+          label,
+          key: const Key('camera-zoom-label'),
+          style: const TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.bold,
+          ),
         ),
       ),
     );

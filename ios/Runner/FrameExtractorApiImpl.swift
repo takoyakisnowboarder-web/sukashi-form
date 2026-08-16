@@ -1,5 +1,6 @@
 import AVFoundation
 import Flutter
+import Photos
 import UIKit
 import Vision
 
@@ -9,7 +10,7 @@ import Vision
 /// AVFoundation へ移植したもの。段階的に実装している:
 ///   - フェーズ1(実装済み): probe(尺・破損検出)/ generateThumbnail(サムネイル)
 ///   - フェーズ2(実装済み): extractFrames(範囲指定でのフレーム一括展開)+ 進捗 + キャンセル
-///   - フェーズ3(未実装): saveVideoToGallery / 音量キー録画
+///   - フェーズ3: saveVideoToGallery(Photos) / 音量キー録画は未実装
 ///
 /// probe / generateThumbnail / extractFrames は Pigeon 側でバックグラウンドの
 /// TaskQueue にディスパッチされて呼ばれるため、ここで同期的にブロッキング処理をしてよい。
@@ -529,18 +530,55 @@ final class FrameExtractorApiImpl: FrameExtractorApi {
     }
   }
 
-  // MARK: - フェーズ3(未実装)
+  // MARK: - ギャラリー保存
 
   func isGallerySaveSupported() throws -> Bool {
-    // ギャラリー自動保存はフェーズ3。現状は非対応として設定自体を出さない。
-    return false
+    return true
   }
 
   func saveVideoToGallery(
     absoluteVideoPath: String,
     completion: @escaping (Result<Void, Error>) -> Void
   ) {
-    completion(.failure(makeError("Gallery saving is not implemented on iOS yet.")))
+    let url = URL(fileURLWithPath: absoluteVideoPath)
+    guard fileSize(at: absoluteVideoPath) > 0 else {
+      completion(.failure(makeError("Recorded video is unavailable.")))
+      return
+    }
+
+    let finish: (Result<Void, Error>) -> Void = { result in
+      DispatchQueue.main.async {
+        completion(result)
+      }
+    }
+
+    let save = {
+      PHPhotoLibrary.shared().performChanges({
+        PHAssetChangeRequest.creationRequestForAssetFromVideo(atFileURL: url)
+      }) { success, error in
+        if success {
+          finish(.success(()))
+        } else {
+          finish(.failure(error ?? self.makeError("Gallery saving failed.")))
+        }
+      }
+    }
+
+    let status = PHPhotoLibrary.authorizationStatus(for: .addOnly)
+    switch status {
+    case .authorized, .limited:
+      save()
+    case .notDetermined:
+      PHPhotoLibrary.requestAuthorization(for: .addOnly) { newStatus in
+        if newStatus == .authorized || newStatus == .limited {
+          save()
+        } else {
+          finish(.failure(self.makeError("Photo library permission denied.")))
+        }
+      }
+    default:
+      finish(.failure(makeError("Photo library permission denied.")))
+    }
   }
 
   func setVolumeKeyCaptureEnabled(enabled: Bool) throws {
