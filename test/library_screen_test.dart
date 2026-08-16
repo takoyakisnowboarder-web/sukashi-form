@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sukashi_form/data/clip_repository.dart';
 import 'package:sukashi_form/models/clip.dart';
+import 'package:sukashi_form/native/capture_device_bridge.dart';
 import 'package:sukashi_form/providers/clip_providers.dart';
 import 'package:sukashi_form/screens/library_screen.dart';
 
@@ -69,6 +70,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('比較範囲を選択'), findsNothing);
     expect(find.text('座標を保存'), findsNothing);
+    expect(find.text('写真に保存'), findsNothing);
   });
 
   testWidgets('範囲設定済みクリップに選択範囲を表示する', (tester) async {
@@ -96,6 +98,28 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('座標を保存'), findsOneWidget);
     expect(find.text('この1本だけをJSONで書き出します'), findsOneWidget);
+    expect(find.text('写真に保存'), findsOneWidget);
+  });
+
+  testWidgets('長押しメニューから写真に保存できる', (tester) async {
+    final bridge = _FakeCaptureDeviceBridge();
+    await _pumpLibrary(
+      tester,
+      repository,
+      <Clip>[_clip(id: 'solo', durationMs: 5000)],
+      deviceBridge: bridge,
+    );
+    await tester.longPress(find.text('メモなし'));
+    await tester.pumpAndSettle();
+    expect(find.text('写真に保存'), findsOneWidget);
+
+    await tester.tap(find.text('写真に保存'));
+    await tester.pumpAndSettle();
+    expect(
+      bridge.savedPaths,
+      <String>[await repository.resolveAbsolutePath('videos/solo.mp4')],
+    );
+    expect(find.text('写真に保存しました。'), findsOneWidget);
   });
 }
 
@@ -111,13 +135,16 @@ class _TestClipListNotifier extends ClipListNotifier {
 Future<void> _pumpLibrary(
   WidgetTester tester,
   ClipRepository repository,
-  List<Clip> clips,
-) async {
+  List<Clip> clips, {
+  CaptureDeviceBridge? deviceBridge,
+}) async {
   await tester.pumpWidget(
     ProviderScope(
       overrides: [
         clipRepositoryProvider.overrideWithValue(repository),
         clipListProvider.overrideWith(() => _TestClipListNotifier(clips)),
+        if (deviceBridge != null)
+          captureDeviceBridgeProvider.overrideWithValue(deviceBridge),
         thumbnailWidgetBuilderProvider.overrideWithValue(
           (path, key) => ColoredBox(key: key, color: Colors.blue),
         ),
@@ -129,6 +156,24 @@ Future<void> _pumpLibrary(
     ),
   );
   await tester.pump();
+}
+
+class _FakeCaptureDeviceBridge implements CaptureDeviceBridge {
+  final List<String> savedPaths = <String>[];
+
+  @override
+  Future<void> disableVolumeKeyCapture() async {}
+
+  @override
+  Future<void> enableVolumeKeyCapture(VoidCallback onPressed) async {}
+
+  @override
+  Future<bool> isGallerySaveSupported() async => true;
+
+  @override
+  Future<void> saveVideoToGallery(String absoluteVideoPath) async {
+    savedPaths.add(absoluteVideoPath);
+  }
 }
 
 Clip _clip({

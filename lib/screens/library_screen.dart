@@ -7,12 +7,20 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:image_picker/image_picker.dart';
 
+import '../data/clip_gallery_saver.dart';
 import '../models/clip.dart' as model;
 import '../providers/clip_providers.dart';
 import '../pose/pose_movement_dialog.dart';
 import '../providers/pose_providers.dart';
 
-enum _ClipAction { selectRange, exportPose, extractFrames, editMemo, delete }
+enum _ClipAction {
+  selectRange,
+  exportPose,
+  saveToPhotos,
+  extractFrames,
+  editMemo,
+  delete,
+}
 
 typedef ThumbnailWidgetBuilder = Widget Function(String path, Key key);
 
@@ -178,6 +186,14 @@ class _ClipGrid extends ConsumerWidget {
                 subtitle: const Text('この1本だけをJSONで書き出します'),
                 onTap: () => Navigator.pop(context, _ClipAction.exportPose),
               ),
+            if (!clip.isBroken)
+              ListTile(
+                key: Key('save-to-photos-${clip.id}'),
+                leading: const Icon(Icons.photo_outlined),
+                title: const Text('写真に保存'),
+                subtitle: const Text('端末の写真アプリへコピーします'),
+                onTap: () => Navigator.pop(context, _ClipAction.saveToPhotos),
+              ),
             if (kDebugMode)
               ListTile(
                 leading: const Icon(Icons.photo_library_outlined),
@@ -206,12 +222,35 @@ class _ClipGrid extends ConsumerWidget {
         await context.push('/comparison-range/${clip.id}');
       case _ClipAction.exportPose:
         await _exportPose(context, ref, clip);
+      case _ClipAction.saveToPhotos:
+        await _saveToPhotos(context, ref, clip);
       case _ClipAction.extractFrames:
         await context.push('/debug/frame-extraction/${clip.id}');
       case _ClipAction.editMemo:
         await _editMemo(context, ref, clip);
       case _ClipAction.delete:
         await _confirmDelete(context, ref, clip);
+    }
+  }
+
+  Future<void> _saveToPhotos(
+    BuildContext context,
+    WidgetRef ref,
+    model.Clip clip,
+  ) async {
+    try {
+      await ref.read(clipGallerySaverProvider).save(clip);
+      if (context.mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('写真に保存しました。')));
+      }
+    } on Object {
+      if (context.mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('写真に保存できませんでした。')));
+      }
     }
   }
 

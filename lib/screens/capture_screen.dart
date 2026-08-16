@@ -121,7 +121,8 @@ class _CaptureScreenState extends ConsumerState<CaptureScreen>
       await controller.lockCaptureOrientation(DeviceOrientation.portraitUp);
       final minZoom = await controller.getMinZoomLevel();
       final maxZoom = await controller.getMaxZoomLevel();
-      await controller.setZoomLevel(minZoom);
+      final zoom = CameraZoom.fromDevice(min: minZoom, max: maxZoom);
+      await controller.setZoomLevel(zoom.current);
       if (!mounted) {
         await controller.dispose();
         return;
@@ -131,8 +132,8 @@ class _CaptureScreenState extends ConsumerState<CaptureScreen>
       await previous?.dispose();
       setState(() {
         _isInitializing = false;
-        _zoom = CameraZoom(min: minZoom, max: maxZoom, current: minZoom);
-        _zoomAtGestureStart = minZoom;
+        _zoom = zoom;
+        _zoomAtGestureStart = zoom.current;
       });
     } on CameraException catch (error) {
       if (mounted) {
@@ -192,6 +193,36 @@ class _CaptureScreenState extends ConsumerState<CaptureScreen>
       }
     } on CameraException {
       // Keep the last applied zoom if the device rejects an intermediate value.
+    }
+  }
+
+  Future<void> _showZoomPicker() async {
+    final options = _zoom.availablePresets;
+    if (options.isEmpty) {
+      return;
+    }
+    final selected = await showModalBottomSheet<double>(
+      context: context,
+      builder: (context) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              const ListTile(title: Text('倍率')),
+              for (final zoom in options)
+                ListTile(
+                  key: Key('zoom-preset-${zoom.round()}'),
+                  title: Text('${zoom.round()}x'),
+                  selected: (_zoom.current - zoom).abs() < 0.05,
+                  onTap: () => Navigator.pop(context, zoom),
+                ),
+            ],
+          ),
+        );
+      },
+    );
+    if (selected != null) {
+      await _applyZoom(selected);
     }
   }
 
@@ -366,31 +397,35 @@ class _CaptureScreenState extends ConsumerState<CaptureScreen>
                         .setSaveToGallery(enabled),
                   ),
                   Expanded(
-                    child: GestureDetector(
-                      behavior: HitTestBehavior.opaque,
-                      onScaleStart: _onZoomStart,
-                      onScaleUpdate: _onZoomUpdate,
-                      child: Stack(
-                        alignment: Alignment.center,
-                        children: <Widget>[
-                          if (_session.phase == CapturePhase.countingDown)
-                            Text(
-                              '${_session.countdownRemaining}',
-                              key: const Key('countdown-display'),
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 96,
-                                fontWeight: FontWeight.bold,
-                                shadows: <Shadow>[Shadow(blurRadius: 8)],
-                              ),
+                    child: Stack(
+                      alignment: Alignment.center,
+                      children: <Widget>[
+                        GestureDetector(
+                          behavior: HitTestBehavior.opaque,
+                          onScaleStart: _onZoomStart,
+                          onScaleUpdate: _onZoomUpdate,
+                          child: const SizedBox.expand(),
+                        ),
+                        if (_session.phase == CapturePhase.countingDown)
+                          Text(
+                            '${_session.countdownRemaining}',
+                            key: const Key('countdown-display'),
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 96,
+                              fontWeight: FontWeight.bold,
+                              shadows: <Shadow>[Shadow(blurRadius: 8)],
                             ),
-                          if (_zoom.canZoom)
-                            Positioned(
-                              bottom: 16,
-                              child: _ZoomBadge(label: _zoom.label),
+                          ),
+                        if (_zoom.canZoom)
+                          Positioned(
+                            bottom: 16,
+                            child: _ZoomBadge(
+                              label: _zoom.label,
+                              onTap: () => unawaited(_showZoomPicker()),
                             ),
-                        ],
-                      ),
+                          ),
+                      ],
                     ),
                   ),
                   _CaptureControls(
@@ -415,25 +450,28 @@ class _CaptureScreenState extends ConsumerState<CaptureScreen>
 }
 
 class _ZoomBadge extends StatelessWidget {
-  const _ZoomBadge({required this.label});
+  const _ZoomBadge({required this.label, required this.onTap});
 
   final String label;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: Colors.black54,
+    return Material(
+      color: Colors.black54,
+      borderRadius: BorderRadius.circular(20),
+      child: InkWell(
+        key: const Key('camera-zoom-label'),
+        onTap: onTap,
         borderRadius: BorderRadius.circular(20),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-        child: Text(
-          label,
-          key: const Key('camera-zoom-label'),
-          style: const TextStyle(
-            color: Colors.white,
-            fontWeight: FontWeight.bold,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          child: Text(
+            label,
+            style: const TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.bold,
+            ),
           ),
         ),
       ),
