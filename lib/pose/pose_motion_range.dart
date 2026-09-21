@@ -96,7 +96,9 @@ class PoseMotionRangeAnalyzer implements MotionRangeAnalyzer {
         ),
     ];
     final guess = guessMotionRange(
-      timesMs: track.frames.map((frame) => frame.timeMs).toList(growable: false),
+      timesMs: track.frames
+          .map((frame) => frame.timeMs)
+          .toList(growable: false),
       poses: poses,
       clipDurationMs: durationMs,
     );

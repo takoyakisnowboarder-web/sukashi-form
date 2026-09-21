@@ -156,10 +156,7 @@ class _ComparisonRangeScreenState extends ConsumerState<ComparisonRangeScreen> {
 
   void _applyGuess(MotionRangeGuess guess) {
     setState(() {
-      _values = RangeValues(
-        guess.startMs.toDouble(),
-        guess.endMs.toDouble(),
-      );
+      _values = RangeValues(guess.startMs.toDouble(), guess.endMs.toDouble());
       _activeHandleMs = guess.peakMs.toDouble();
     });
   }
@@ -212,9 +209,9 @@ class _ComparisonRangeScreenState extends ConsumerState<ComparisonRangeScreen> {
       );
     } on Object {
       if (fromUser && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('動作区間を探せませんでした。')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('動作区間を探せませんでした。')));
       }
     } finally {
       if (mounted && generation == _detectGeneration) {
@@ -405,9 +402,7 @@ class _ComparisonRangeScreenState extends ConsumerState<ComparisonRangeScreen> {
                     onPressed: _canAutoCut
                         ? () => unawaited(_cutMotionRange(fromUser: true))
                         : null,
-                    child: Text(
-                      _detecting ? '動きを探しています…' : '動作区間を自動で切る',
-                    ),
+                    child: Text(_detecting ? '動きを探しています…' : '動作区間を自動で切る'),
                   ),
                   const SizedBox(height: 8),
                   FilledButton(

@@ -64,11 +64,7 @@ void main() {
     ];
 
     expect(
-      guessMotionRange(
-        timesMs: times,
-        poses: poses,
-        clipDurationMs: 30000,
-      ),
+      guessMotionRange(timesMs: times, poses: poses, clipDurationMs: 30000),
       isNull,
     );
   });
