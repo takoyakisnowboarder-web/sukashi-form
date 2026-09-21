@@ -96,6 +96,8 @@ class PoseAnalysisService {
   final PoseDetectorClient _detector;
   final PoseCacheRepository _cache;
 
+  bool get isSupported => _detector.isSupported;
+
   PoseAnalysisSession analyzeClip({
     required String clipId,
     required List<String> framePaths,
