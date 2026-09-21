@@ -53,6 +53,11 @@ workflows:
           # (いまは 2.0.0) では TestFlight に追加ビルドを載せられない。
           # ビルド番号は Codemagic の連番にして、再アップロードでも一意にする。
           BUILD_NAME="$(grep '^version:' pubspec.yaml | cut -d ' ' -f2 | cut -d '+' -f1)"
+          echo "CFBundleShortVersionString=$BUILD_NAME  BUILD_NUMBER=$BUILD_NUMBER"
+          if [ "$BUILD_NAME" = "2.0.0" ]; then
+            echo "2.0.0 は審査通過済みのため TestFlight に載せられない。pubspec.yaml を上げること。"
+            exit 1
+          fi
           flutter build ipa --release \
             --build-name="$BUILD_NAME" \
             --build-number=$BUILD_NUMBER \
