@@ -35,20 +35,34 @@ workflows:
         script: flutter pub get
       - name: CocoaPods を取得
         script: |
-          # Windows で作った Generated.xcconfig は FLUTTER_ROOT が
-          # C:\Users\... のままなので、Mac 上で作り直してから pod install する。
+          # Podfile は Generated.xcconfig の FLUTTER_ROOT だけ見る。
+          # Windows の C:\Users\... が残っていると Mac で podhelper を読めない。
+          # この段階では署名しない（証明書は後の IPA ビルドで付ける）。
           # CDN の HTTP/2 切断 (curl 92) は再試行する。
-          rm -f ios/Flutter/Generated.xcconfig ios/Flutter/flutter_export_environment.sh
+          FLUTTER_SDK="$(flutter sdk-path)"
+          if [ ! -f "$FLUTTER_SDK/packages/flutter_tools/bin/podhelper" ]; then
+            echo "podhelper が見つからない: $FLUTTER_SDK"
+            exit 1
+          fi
+          mkdir -p ios/Flutter
+          {
+            echo "FLUTTER_ROOT=$FLUTTER_SDK"
+            echo "FLUTTER_APPLICATION_PATH=$PWD"
+            echo "COCOAPODS_PARALLEL_CODE_SIGN=true"
+            echo "FLUTTER_TARGET=lib/main.dart"
+            echo "FLUTTER_BUILD_DIR=build"
+            echo "PACKAGE_CONFIG=.dart_tool/package_config.json"
+          } > ios/Flutter/Generated.xcconfig
+          echo "FLUTTER_ROOT=$FLUTTER_SDK"
           printf '%s\n' '--http1.1' '--retry' '5' '--retry-delay' '3' >> "$HOME/.curlrc"
           attempt=1
           while [ "$attempt" -le 5 ]; do
-            if flutter build ios --config-only --release; then
+            if (cd ios && pod install --repo-update); then
               exit 0
             fi
             echo "pod install 失敗 ($attempt/5)。途中キャッシュを捨てて再試行します。"
             pod cache clean --all || true
             rm -rf ios/Pods
-            rm -f ios/Flutter/Generated.xcconfig ios/Flutter/flutter_export_environment.sh
             attempt=$((attempt + 1))
             sleep $((attempt * 8))
           done
@@ -115,17 +129,30 @@ workflows:
         script: flutter pub get
       - name: CocoaPods を取得
         script: |
-          rm -f ios/Flutter/Generated.xcconfig ios/Flutter/flutter_export_environment.sh
+          FLUTTER_SDK="$(flutter sdk-path)"
+          if [ ! -f "$FLUTTER_SDK/packages/flutter_tools/bin/podhelper" ]; then
+            echo "podhelper が見つからない: $FLUTTER_SDK"
+            exit 1
+          fi
+          mkdir -p ios/Flutter
+          {
+            echo "FLUTTER_ROOT=$FLUTTER_SDK"
+            echo "FLUTTER_APPLICATION_PATH=$PWD"
+            echo "COCOAPODS_PARALLEL_CODE_SIGN=true"
+            echo "FLUTTER_TARGET=lib/main.dart"
+            echo "FLUTTER_BUILD_DIR=build"
+            echo "PACKAGE_CONFIG=.dart_tool/package_config.json"
+          } > ios/Flutter/Generated.xcconfig
+          echo "FLUTTER_ROOT=$FLUTTER_SDK"
           printf '%s\n' '--http1.1' '--retry' '5' '--retry-delay' '3' >> "$HOME/.curlrc"
           attempt=1
           while [ "$attempt" -le 5 ]; do
-            if flutter build ios --config-only --debug --simulator; then
+            if (cd ios && pod install --repo-update); then
               exit 0
             fi
             echo "pod install 失敗 ($attempt/5)。途中キャッシュを捨てて再試行します。"
             pod cache clean --all || true
             rm -rf ios/Pods
-            rm -f ios/Flutter/Generated.xcconfig ios/Flutter/flutter_export_environment.sh
             attempt=$((attempt + 1))
             sleep $((attempt * 8))
           done
