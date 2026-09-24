@@ -75,6 +75,7 @@ class _CompareScreenState extends ConsumerState<CompareScreen>
   int _poseSession = 0;
   String _poseProgressLabel = '';
   final Map<String, PoseFrame> _poses = <String, PoseFrame>{};
+  Future<void>? _poseAnalysisFuture;
 
   @override
   void initState() {
@@ -257,10 +258,23 @@ class _CompareScreenState extends ConsumerState<CompareScreen>
 
   Future<void> _ensurePoses(ComparisonController controller) async {
     final detector = ref.read(poseDetectorClientProvider);
-    if (!detector.isSupported || _poseAnalyzing) {
+    if (!detector.isSupported) {
       return;
     }
-    await _analyzePoses(controller);
+    final inFlight = _poseAnalysisFuture;
+    if (inFlight != null) {
+      await inFlight;
+      return;
+    }
+    final future = _analyzePoses(controller);
+    _poseAnalysisFuture = future;
+    try {
+      await future;
+    } finally {
+      if (identical(_poseAnalysisFuture, future)) {
+        _poseAnalysisFuture = null;
+      }
+    }
   }
 
   Future<void> _setFollowDistance(
@@ -331,7 +345,7 @@ class _CompareScreenState extends ConsumerState<CompareScreen>
       return;
     }
     setState(() => _poseEnabled = true);
-    await _analyzePoses(controller);
+    await _ensurePoses(controller);
   }
 
   Future<void> _analyzePoses(ComparisonController controller) async {
@@ -446,16 +460,14 @@ class _CompareScreenState extends ConsumerState<CompareScreen>
     if (!mounted || movement == null) {
       return;
     }
-    final sessionId = ++_poseSession;
-    setState(() {
-      _poseAnalyzing = true;
-      _poseProgressLabel = '座標データを準備しています…';
-    });
+    final controller = _controller;
+    if (controller != null) {
+      await _ensurePoses(controller);
+    }
+    if (!mounted) {
+      return;
+    }
     try {
-      await _analyzeTrack(track, sessionId: sessionId, progressLabel: '座標書き出し');
-      if (!mounted || sessionId != _poseSession) {
-        return;
-      }
       await ref
           .read(poseExportSharerProvider)
           .shareJsonFile(
@@ -471,26 +483,10 @@ class _CompareScreenState extends ConsumerState<CompareScreen>
             sharePositionOrigin: sharePositionOrigin,
           );
     } on Object {
-      if (mounted && sessionId == _poseSession) {
+      if (mounted) {
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(const SnackBar(content: Text('座標データの書き出しに失敗しました。')));
-      }
-    } finally {
-      if (mounted && sessionId == _poseSession) {
-        final detected = _poses.values
-            .where((pose) => pose.landmarks.isNotEmpty)
-            .length;
-        setState(() {
-          _poseAnalyzing = false;
-          if (_poseEnabled) {
-            _poseProgressLabel = detected == 0
-                ? '骨格を検出できませんでした'
-                : '骨格 $detected コマ検出';
-          } else {
-            _poseProgressLabel = '';
-          }
-        });
       }
     }
   }

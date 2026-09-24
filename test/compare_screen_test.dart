@@ -629,6 +629,51 @@ void main() {
     expect(find.byKey(const Key('pose-skeleton-b')), findsOneWidget);
   });
 
+  testWidgets('距離合わせの解析中に骨格表示をオンにしても骨格が出る', (tester) async {
+    final detector = _SlowPoseDetector();
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          clipRepositoryProvider.overrideWithValue(clipRepository),
+          comparisonPairRepositoryProvider.overrideWithValue(pairRepository),
+          clipListProvider.overrideWith(
+            () => _TestClipListNotifier(<Clip>[
+              _clip('a', 5000),
+              _clip('b', 5000),
+            ]),
+          ),
+          comparisonExtractionStarterProvider.overrideWithValue(
+            (_) => _completedSession(),
+          ),
+          poseDetectorClientProvider.overrideWithValue(detector),
+          poseAnalysisServiceProvider.overrideWithValue(
+            PoseAnalysisService(detector, _MemoryPoseCache(clipRepository)),
+          ),
+        ],
+        child: const MaterialApp(
+          home: CompareScreen(clipIds: <String>['a', 'b']),
+        ),
+      ),
+    );
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 40)),
+    );
+    await _pumpFrames(tester, 8);
+
+    await _openSettings(tester);
+    await tester.ensureVisible(find.byKey(const Key('pose-overlay-toggle')));
+    await tester.runAsync(() async {
+      await tester.tap(find.byKey(const Key('pose-overlay-toggle')));
+      await Future<void>.delayed(const Duration(milliseconds: 400));
+    });
+    await _pumpFrames(tester, 20);
+
+    expect(find.byKey(const Key('pose-angle-hud')), findsOneWidget);
+    expect(find.textContaining('人を検出できませんでした'), findsNothing);
+    expect(find.byKey(const Key('pose-skeleton-a')), findsOneWidget);
+    expect(find.byKey(const Key('pose-skeleton-b')), findsOneWidget);
+  });
+
   testWidgets('距離合わせが設定でオンになっている', (tester) async {
     await _pump(
       tester,
@@ -835,6 +880,14 @@ class _RecordingPoseExportSharer implements PoseExportSharer {
   }) async {
     this.fileName = fileName;
     this.contents = contents;
+  }
+}
+
+class _SlowPoseDetector extends _FakePoseDetector {
+  @override
+  Future<PoseFrame?> detect(String imagePath) async {
+    await Future<void>.delayed(const Duration(milliseconds: 40));
+    return super.detect(imagePath);
   }
 }
 
