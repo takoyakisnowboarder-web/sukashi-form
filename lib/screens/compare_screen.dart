@@ -71,7 +71,6 @@ class _CompareScreenState extends ConsumerState<CompareScreen>
   bool _poseEnabled = false;
   bool _followDistance = true;
   bool _poseAnalyzing = false;
-  final Map<String, SubjectFollow> _lastFollow = <String, SubjectFollow>{};
   int _poseSession = 0;
   String _poseProgressLabel = '';
   final Map<String, PoseFrame> _poses = <String, PoseFrame>{};
@@ -292,7 +291,6 @@ class _CompareScreenState extends ConsumerState<CompareScreen>
   ) async {
     setState(() => _followDistance = enabled);
     if (!enabled) {
-      _lastFollow.clear();
       return;
     }
     await _ensurePoses(controller);
@@ -315,18 +313,11 @@ class _CompareScreenState extends ConsumerState<CompareScreen>
     if (track == null) {
       return SubjectFollow.identity;
     }
-    final reference = referenceSubjectSize([
-      for (final frame in track.frames) _poses[frame.path],
-    ]);
-    if (reference == null) {
-      return _lastFollow[clipId] ?? SubjectFollow.identity;
-    }
-    final follow = followSubject(pose: _poses[path], referenceSize: reference);
-    if (follow != SubjectFollow.identity) {
-      _lastFollow[clipId] = follow;
-      return follow;
-    }
-    return _lastFollow[clipId] ?? SubjectFollow.identity;
+    final index = track.frames.indexWhere((frame) => frame.path == path);
+    return playbackFollow(
+      poses: [for (final frame in track.frames) _poses[frame.path]],
+      index: index,
+    );
   }
 
   Future<void> _setPoseEnabled(
@@ -1134,8 +1125,8 @@ class _CompareScreenState extends ConsumerState<CompareScreen>
         '透過の操作対象と比較グリッドは、設定から選べます。\n\n'
         '骨格表示をオンにすると、端末内だけで頭・肩・腰・膝・足元の点を推定し、'
         '関節角度を表示します。映像は外部へ送信されません。\n\n'
-        '「遠ざかったら拡大」は同じ骨格から体の見かけの大きさを見て、'
-        '奥に小さくなったコマだけ拡大します。\n\n'
+        '「距離合わせ」は人が写っているあいだ体を中央に寄せて拡大し、'
+        '最後に人がいなくなったら元の画角へ戻します。\n\n'
         '座標の保存は1本ずつです。保存の前に「この動作は何ですか？」と聞きます。'
         '種目と技を書くと、AIが座標の意味を読みやすくなります。',
       ),

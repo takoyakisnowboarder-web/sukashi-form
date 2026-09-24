@@ -52,21 +52,54 @@ double? poseSubjectSize(PoseFrame pose) {
       _single(pose, PoseJoint.nose);
 }
 
+bool personIsInFrame(PoseFrame? pose) {
+  return pose != null &&
+      pose.landmarks.isNotEmpty &&
+      poseSubjectCenter(pose) != null;
+}
+
 SubjectFollow followSubject({
   required PoseFrame? pose,
   required double referenceSize,
   double maxScale = subjectFollowMaxScale,
 }) {
-  if (pose == null || referenceSize <= 0) {
+  if (pose == null || referenceSize <= 0 || !personIsInFrame(pose)) {
     return SubjectFollow.identity;
   }
   final size = poseSubjectSize(pose);
   final center = poseSubjectCenter(pose);
-  if (size == null || size <= 0) {
+  final scale = size == null || size <= 0
+      ? 1.0
+      : (referenceSize / size).clamp(1.0, maxScale);
+  return SubjectFollow(scale: scale, centerX: center?.x, centerY: center?.y);
+}
+
+/// While the person is in frame, keep them. After the last detection, release
+/// the frame so they can leave. A short miss in the middle keeps the last look.
+SubjectFollow playbackFollow({
+  required List<PoseFrame?> poses,
+  required int index,
+}) {
+  if (index < 0 || index >= poses.length) {
     return SubjectFollow.identity;
   }
-  final scale = (referenceSize / size).clamp(1.0, maxScale);
-  return SubjectFollow(scale: scale, centerX: center?.x, centerY: center?.y);
+  final reference = referenceSubjectSize(poses);
+  if (reference == null) {
+    return SubjectFollow.identity;
+  }
+  if (personIsInFrame(poses[index])) {
+    return followSubject(pose: poses[index], referenceSize: reference);
+  }
+  final returnsLater = poses.skip(index + 1).any(personIsInFrame);
+  if (!returnsLater) {
+    return SubjectFollow.identity;
+  }
+  for (var earlier = index - 1; earlier >= 0; earlier--) {
+    if (personIsInFrame(poses[earlier])) {
+      return followSubject(pose: poses[earlier], referenceSize: reference);
+    }
+  }
+  return SubjectFollow.identity;
 }
 
 double? referenceSubjectSize(Iterable<PoseFrame?> poses) {

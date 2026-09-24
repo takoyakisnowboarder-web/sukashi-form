@@ -39,32 +39,35 @@ class ComparisonFrameView extends StatelessWidget {
           angle: transform.rotation,
           child: Transform.scale(
             key: Key('frame-scale-$clipId'),
-            alignment: _followAlignment(follow),
+            alignment: Alignment.center,
             scale: transform.scale * follow.scale,
-            child: Stack(
-              fit: StackFit.expand,
-              children: <Widget>[
-                Image.file(
-                  File(path),
-                  key: Key('frame-image-$clipId'),
-                  fit: BoxFit.contain,
-                  cacheWidth: cacheWidth,
-                  gaplessPlayback: true,
-                  errorBuilder: (_, _, _) => const Center(
-                    child: Icon(Icons.broken_image, color: Colors.white),
-                  ),
-                ),
-                if (pose != null && pose!.landmarks.isNotEmpty)
-                  Positioned.fill(
-                    child: CustomPaint(
-                      key: Key('pose-skeleton-$clipId'),
-                      painter: PoseSkeletonPainter(
-                        pose: pose!,
-                        color: skeletonColor,
-                      ),
+            child: FractionalTranslation(
+              translation: _followShift(follow),
+              child: Stack(
+                fit: StackFit.expand,
+                children: <Widget>[
+                  Image.file(
+                    File(path),
+                    key: Key('frame-image-$clipId'),
+                    fit: BoxFit.contain,
+                    cacheWidth: cacheWidth,
+                    gaplessPlayback: true,
+                    errorBuilder: (_, _, _) => const Center(
+                      child: Icon(Icons.broken_image, color: Colors.white),
                     ),
                   ),
-              ],
+                  if (pose != null && pose!.landmarks.isNotEmpty)
+                    Positioned.fill(
+                      child: CustomPaint(
+                        key: Key('pose-skeleton-$clipId'),
+                        painter: PoseSkeletonPainter(
+                          pose: pose!,
+                          color: skeletonColor,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
             ),
           ),
         ),
@@ -73,11 +76,11 @@ class ComparisonFrameView extends StatelessWidget {
   }
 }
 
-Alignment _followAlignment(SubjectFollow follow) {
+Offset _followShift(SubjectFollow follow) {
   final x = follow.centerX;
   final y = follow.centerY;
-  if (x == null || y == null || follow.scale <= 1.01) {
-    return Alignment.center;
+  if (x == null || y == null) {
+    return Offset.zero;
   }
-  return Alignment((x - 0.5) * 2, (y - 0.5) * 2);
+  return Offset(0.5 - x, 0.5 - y);
 }
