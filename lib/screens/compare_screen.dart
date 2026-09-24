@@ -1017,6 +1017,20 @@ class _CompareScreenState extends ConsumerState<CompareScreen>
     setState(() {});
   }
 
+  void _setManualScale(ComparisonController controller, double scale) {
+    final target = _alignmentTargetClipId ?? controller.trackB.clipId;
+    final current = controller.transformFor(target);
+    controller.setTransform(
+      target,
+      AlignmentTransform(
+        dx: current.dx,
+        dy: current.dy,
+        scale: scale.clamp(1, 3),
+        rotation: current.rotation,
+      ),
+    );
+  }
+
   String _alignmentHint(ComparisonController controller) {
     if (_displayMode == ComparisonDisplayMode.split) {
       return '触った映像を操作（ドラッグ／ピンチ／2本指回転）';
@@ -1080,6 +1094,7 @@ class _CompareScreenState extends ConsumerState<CompareScreen>
         '透過は2本を重ね、分割は上下または左右に並べます。\n\n'
         '基準同期では、AとBそれぞれの同じ瞬間を選んで再生位置を揃えます。\n\n'
         '位置合わせでは、ドラッグで移動、ピンチで拡大縮小、2本指で回転できます。\n'
+        '設定の「拡大」でも、操作対象の映像を1倍から3倍まで拡大できます。\n'
         '透過の操作対象と比較グリッドは、設定から選べます。\n\n'
         '骨格表示をオンにすると、端末内だけで頭・肩・腰・膝・足元の点を推定し、'
         '関節角度を表示します。映像は外部へ送信されません。\n\n'
@@ -1350,6 +1365,46 @@ class _CompareScreenState extends ConsumerState<CompareScreen>
                               ],
                             ),
                           ],
+                        ),
+                      ),
+                      _settingsRow(
+                        label: '拡大',
+                        child: Builder(
+                          builder: (context) {
+                            final target =
+                                _alignmentTargetClipId ??
+                                controller.trackB.clipId;
+                            final scale = controller
+                                .transformFor(target)
+                                .scale
+                                .clamp(1.0, 3.0);
+                            final label = target == controller.trackA.clipId
+                                ? 'A'
+                                : 'B';
+                            return Row(
+                              children: <Widget>[
+                                SizedBox(width: 16, child: Text(label)),
+                                Expanded(
+                                  child: Slider(
+                                    key: const Key('manual-zoom-slider'),
+                                    min: 1,
+                                    max: 3,
+                                    divisions: 8,
+                                    value: scale,
+                                    onChanged: (value) => refresh(
+                                      () => _setManualScale(controller, value),
+                                    ),
+                                    onChangeEnd: (_) =>
+                                        unawaited(_savePair(controller)),
+                                  ),
+                                ),
+                                SizedBox(
+                                  width: 40,
+                                  child: Text('${scale.toStringAsFixed(1)}x'),
+                                ),
+                              ],
+                            );
+                          },
                         ),
                       ),
                       _settingsRow(

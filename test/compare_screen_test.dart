@@ -163,6 +163,41 @@ void main() {
     expect((image.image as ResizeImage).width, 640);
   });
 
+  testWidgets('設定の拡大スライダーで操作対象Bを拡大する', (tester) async {
+    await _pump(
+      tester,
+      <Clip>[_clip('a', 5000), _clip('b', 5000)],
+      (_) => _completedSession(),
+      clipRepository,
+      pairRepository,
+    );
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 100)),
+    );
+    await _pumpFrames(tester, 20);
+    await _openSettings(tester);
+    await tester.ensureVisible(find.byKey(const Key('manual-zoom-slider')));
+    await tester.drag(
+      find.byKey(const Key('manual-zoom-slider')),
+      const Offset(400, 0),
+    );
+    await tester.pump();
+    expect(
+      tester
+          .widget<Transform>(find.byKey(const Key('frame-scale-b')))
+          .transform
+          .storage[0],
+      greaterThan(1.5),
+    );
+    expect(
+      tester
+          .widget<Transform>(find.byKey(const Key('frame-scale-a')))
+          .transform
+          .storage[0],
+      1,
+    );
+  });
+
   testWidgets('モード切替で時刻と変換を維持し透過と分割軸を保存する', (tester) async {
     await _pump(
       tester,
