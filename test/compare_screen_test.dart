@@ -163,6 +163,45 @@ void main() {
     expect((image.image as ResizeImage).width, 640);
   });
 
+  testWidgets('設定の拡大スライダーで操作対象Bを拡大する', (tester) async {
+    await _pump(
+      tester,
+      <Clip>[_clip('a', 5000), _clip('b', 5000)],
+      (_) => _completedSession(),
+      clipRepository,
+      pairRepository,
+    );
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 100)),
+    );
+    await _pumpFrames(tester, 20);
+    await _openSettings(tester);
+    await tester.ensureVisible(find.byKey(const Key('manual-zoom-slider')));
+    await tester.drag(
+      find.byKey(const Key('manual-zoom-slider')),
+      const Offset(400, 0),
+    );
+    await tester.pump();
+    expect(
+      tester.widget<Slider>(find.byKey(const Key('manual-zoom-slider'))).max,
+      10,
+    );
+    expect(
+      tester
+          .widget<Transform>(find.byKey(const Key('frame-scale-b')))
+          .transform
+          .storage[0],
+      closeTo(10, 0.01),
+    );
+    expect(
+      tester
+          .widget<Transform>(find.byKey(const Key('frame-scale-a')))
+          .transform
+          .storage[0],
+      1,
+    );
+  });
+
   testWidgets('モード切替で時刻と変換を維持し透過と分割軸を保存する', (tester) async {
     await _pump(
       tester,
@@ -594,11 +633,12 @@ void main() {
 
     await _openSettings(tester);
     await tester.ensureVisible(find.byKey(const Key('pose-overlay-toggle')));
-    await tester.runAsync(() async {
-      await tester.tap(find.byKey(const Key('pose-overlay-toggle')));
-      await Future<void>.delayed(const Duration(milliseconds: 50));
-    });
-    await _pumpFrames(tester, 20);
+    await tester.tap(find.byKey(const Key('pose-overlay-toggle')));
+    await tester.pump();
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 200)),
+    );
+    await _pumpFrames(tester, 40);
 
     expect(find.byKey(const Key('pose-angle-hud')), findsOneWidget);
     expect(find.textContaining('左膝'), findsWidgets);
@@ -640,11 +680,21 @@ void main() {
     await _pumpFrames(tester, 20);
 
     await _openSettings(tester);
+    await tester.ensureVisible(find.byKey(const Key('pose-overlay-toggle')));
+    await tester.tap(find.byKey(const Key('pose-overlay-toggle')));
+    await tester.pump();
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 200)),
+    );
+    await _pumpFrames(tester, 40);
+    expect(find.textContaining('左膝'), findsWidgets);
+
     await tester.ensureVisible(find.byKey(const Key('pose-export-a')));
-    await tester.runAsync(() async {
-      await tester.tap(find.byKey(const Key('pose-export-a')));
-      await Future<void>.delayed(const Duration(milliseconds: 80));
-    });
+    await tester.tap(find.byKey(const Key('pose-export-a')));
+    await tester.pump();
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 80)),
+    );
     await _pumpFrames(tester, 20);
     expect(find.text('この動作は何ですか？'), findsOneWidget);
     await tester.enterText(
@@ -652,10 +702,11 @@ void main() {
       'スノーボード 10mキッカー バックサイド720',
     );
     await tester.tap(find.byKey(const Key('pose-movement-confirm')));
+    await tester.pump();
     await tester.runAsync(
-      () => Future<void>.delayed(const Duration(milliseconds: 80)),
+      () => Future<void>.delayed(const Duration(milliseconds: 200)),
     );
-    await _pumpFrames(tester, 20);
+    await _pumpFrames(tester, 30);
 
     expect(sharer.fileName, 'sukashi-pose_0719_a.json');
     expect(sharer.contents, contains(poseExportSchema));
@@ -769,9 +820,7 @@ class _MemoryPoseCache extends PoseCacheRepository {
 
   @override
   Future<Map<String, PoseFrame>> load(String clipId) async {
-    return Map<String, PoseFrame>.of(
-      _store[clipId] ?? <String, PoseFrame>{},
-    );
+    return Map<String, PoseFrame>.of(_store[clipId] ?? <String, PoseFrame>{});
   }
 
   @override

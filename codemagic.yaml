@@ -49,12 +49,34 @@ workflows:
         script: xcode-project use-profiles
       - name: IPA ビルド
         script: |
-          # ビルド番号を Codemagic のビルド連番にして、
-          # TestFlight への再アップロードでも一意になるようにする。
-          flutter build ipa --release \
-            --build-name=2.0.0 \
-            --build-number=$BUILD_NUMBER \
-            --export-options-plist=/Users/builder/export_options.plist
+          # 以前成功した手順: 署名のあと flutter build ipa。
+          # Windows の Generated.xcconfig が残っていると podhelper を誤るので消す。
+          # CocoaPods CDN の HTTP/2 切断 (curl 92) は同じコマンドを再試行する。
+          echo "IPA ビルド commit=$(git rev-parse --short HEAD)"
+          rm -f ios/Flutter/Generated.xcconfig ios/Flutter/flutter_export_environment.sh
+          printf '%s\n' '--http1.1' '--retry' '5' '--retry-delay' '3' >> "$HOME/.curlrc"
+          BUILD_NAME="$(grep '^version:' pubspec.yaml | cut -d ' ' -f2 | cut -d '+' -f1)"
+          echo "CFBundleShortVersionString=$BUILD_NAME  BUILD_NUMBER=$BUILD_NUMBER"
+          if [ "$BUILD_NAME" = "2.0.0" ]; then
+            echo "2.0.0 は審査通過済みのため TestFlight に載せられない。pubspec.yaml を上げること。"
+            exit 1
+          fi
+          attempt=1
+          while [ "$attempt" -le 3 ]; do
+            if flutter build ipa --release \
+              --build-name="$BUILD_NAME" \
+              --build-number=$BUILD_NUMBER \
+              --export-options-plist=/Users/builder/export_options.plist; then
+              exit 0
+            fi
+            echo "IPA ビルド失敗 ($attempt/3)。CocoaPods キャッシュを捨てて再試行します。"
+            pod cache clean --all || true
+            rm -rf ios/Pods
+            rm -f ios/Flutter/Generated.xcconfig ios/Flutter/flutter_export_environment.sh
+            attempt=$((attempt + 1))
+            sleep $((attempt * 10))
+          done
+          exit 1
     artifacts:
       - build/ios/ipa/*.ipa
     publishing:
@@ -87,7 +109,10 @@ workflows:
       - name: Flutter パッケージ取得
         script: flutter pub get
       - name: シミュレータ向けにビルド(署名不要)
-        script: flutter build ios --simulator --debug
+        script: |
+          rm -f ios/Flutter/Generated.xcconfig ios/Flutter/flutter_export_environment.sh
+          printf '%s\n' '--http1.1' '--retry' '5' '--retry-delay' '3' >> "$HOME/.curlrc"
+          flutter build ios --simulator --debug
       - name: シミュレータでスクリーンショットを撮影
         script: |
           set -e

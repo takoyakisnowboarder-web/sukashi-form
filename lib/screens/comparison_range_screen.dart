@@ -7,8 +7,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../data/frame_cache_service.dart';
 import '../models/clip.dart';
+import '../pose/pose_motion_range.dart';
 import '../providers/clip_providers.dart';
 import '../providers/frame_extraction_providers.dart';
+import '../providers/pose_providers.dart';
 
 class ComparisonRangeScreen extends ConsumerStatefulWidget {
   const ComparisonRangeScreen({
@@ -35,6 +37,10 @@ class _ComparisonRangeScreenState extends ConsumerState<ComparisonRangeScreen> {
   double? _activeHandleMs;
   bool _saving = false;
   bool _loadScheduled = false;
+  bool _detecting = false;
+  bool _userEditedRange = false;
+  bool _autoCutAttempted = false;
+  int _detectGeneration = 0;
 
   Clip? get _clip {
     final clips = ref.read(clipListProvider).value ?? <Clip>[];
@@ -48,6 +54,7 @@ class _ComparisonRangeScreenState extends ConsumerState<ComparisonRangeScreen> {
 
   @override
   void dispose() {
+    _detectGeneration += 1;
     unawaited(_progressSubscription?.cancel());
     unawaited(_previewSession?.cancel());
     super.dispose();
@@ -92,6 +99,11 @@ class _ComparisonRangeScreenState extends ConsumerState<ComparisonRangeScreen> {
       final preview = await session.result;
       if (mounted) {
         setState(() => _preview = preview);
+        if (clip.hasComparisonRange) {
+          _autoCutAttempted = true;
+        } else {
+          unawaited(_cutMotionRange(fromUser: false));
+        }
       }
     } on FrameExtractionCancelled {
       // Closing the screen intentionally cancels preview generation.
@@ -142,9 +154,82 @@ class _ComparisonRangeScreenState extends ConsumerState<ComparisonRangeScreen> {
     }
   }
 
+  void _applyGuess(MotionRangeGuess guess) {
+    setState(() {
+      _values = RangeValues(guess.startMs.toDouble(), guess.endMs.toDouble());
+      _activeHandleMs = guess.peakMs.toDouble();
+    });
+  }
+
+  Future<void> _cutMotionRange({required bool fromUser}) async {
+    final clip = _clip;
+    if (clip == null || _saving || _detecting) {
+      return;
+    }
+    if (!fromUser && (_autoCutAttempted || _userEditedRange)) {
+      return;
+    }
+    _autoCutAttempted = true;
+    final generation = ++_detectGeneration;
+    setState(() => _detecting = true);
+    try {
+      final analysis = await ref
+          .read(motionRangeAnalyzerProvider)
+          .analyze(
+            clipId: clip.id,
+            framePaths: _preview?.absoluteFramePaths ?? const <String>[],
+            durationMs: clip.durationMs,
+          );
+      if (!mounted || generation != _detectGeneration) {
+        return;
+      }
+      final guess = analysis.guess;
+      if (guess != null) {
+        if (fromUser || !_userEditedRange) {
+          _applyGuess(guess);
+        }
+        if (fromUser && mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('山場の前後を選びました。スライダーで直せます。')),
+          );
+        }
+        return;
+      }
+      if (!fromUser || !mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            analysis.unsupported
+                ? 'この端末では自動切り取りできません。'
+                : '動きが見つかりませんでした。手動で範囲を選んでください。',
+          ),
+        ),
+      );
+    } on Object {
+      if (fromUser && mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(const SnackBar(content: Text('動作区間を探せませんでした。')));
+      }
+    } finally {
+      if (mounted && generation == _detectGeneration) {
+        setState(() => _detecting = false);
+      }
+    }
+  }
+
+  bool get _canAutoCut {
+    if (_saving || _detecting || _values == null) {
+      return false;
+    }
+    return widget.skipPreviewForTesting || _preview != null;
+  }
+
   void _changeRange(RangeValues next) {
     final previous = _values;
     setState(() {
+      _userEditedRange = true;
       _values = next;
       if (previous == null ||
           (next.start - previous.start).abs() >=
@@ -160,7 +245,11 @@ class _ComparisonRangeScreenState extends ConsumerState<ComparisonRangeScreen> {
     context: context,
     builder: (context) => AlertDialog(
       title: const Text('比較範囲について'),
-      content: const Text('動画そのものは切り取られません。比較に使う範囲を選ぶだけなので、あとから何度でも変更できます。'),
+      content: const Text(
+        '動画そのものは切り取られません。比較に使う範囲を選ぶだけなので、あとから何度でも変更できます。'
+        '撮影は最大30秒です。「動作区間を自動で切る」は、動きが大きいところの前後を'
+        '8秒以上10秒以内で提案します。',
+      ),
       actions: <Widget>[
         TextButton(
           onPressed: () => Navigator.pop(context),
@@ -228,9 +317,9 @@ class _ComparisonRangeScreenState extends ConsumerState<ComparisonRangeScreen> {
                                       _error!,
                                       textAlign: TextAlign.center,
                                       style: TextStyle(
-                                        color: Theme.of(
-                                          context,
-                                        ).colorScheme.errorContainer,
+                                        color: Theme.of(context)
+                                            .colorScheme
+                                            .errorContainer,
                                       ),
                                     ),
                                   )
@@ -268,9 +357,9 @@ class _ComparisonRangeScreenState extends ConsumerState<ComparisonRangeScreen> {
                             _PreviewStrip(paths: preview.absoluteFramePaths)
                           else
                             ColoredBox(
-                              color: Theme.of(
-                                context,
-                              ).colorScheme.surfaceContainerHighest,
+                              color: Theme.of(context)
+                                  .colorScheme
+                                  .surfaceContainerHighest,
                             ),
                           RangeSlider(
                             key: const Key('comparison-range-slider'),
@@ -307,6 +396,14 @@ class _ComparisonRangeScreenState extends ConsumerState<ComparisonRangeScreen> {
                         textAlign: TextAlign.center,
                       ),
                   ],
+                  const SizedBox(height: 8),
+                  OutlinedButton(
+                    key: const Key('auto-cut-motion-range'),
+                    onPressed: _canAutoCut
+                        ? () => unawaited(_cutMotionRange(fromUser: true))
+                        : null,
+                    child: Text(_detecting ? '動きを探しています…' : '動作区間を自動で切る'),
+                  ),
                   const SizedBox(height: 8),
                   FilledButton(
                     key: const Key('save-comparison-range'),

@@ -107,12 +107,7 @@ void main() {
             y: 0.6,
             visibility: 0.9,
           ),
-          NativePoseLandmark(
-            joint: 'notAJoint',
-            x: 0.1,
-            y: 0.1,
-            visibility: 1,
-          ),
+          NativePoseLandmark(joint: 'notAJoint', x: 0.1, y: 0.1, visibility: 1),
         ],
       ),
     );
@@ -166,6 +161,112 @@ void main() {
     await second.result;
     expect(detector.calls, 2);
   });
+
+  test('検出例外はキャッシュせず次の解析で再試行する', () async {
+    final directory = await Directory.systemTemp.createTemp('pose_retry_');
+    addTearDown(() async {
+      if (await directory.exists()) {
+        await directory.delete(recursive: true);
+      }
+    });
+    final detector = _FlakyDetector();
+    final service = PoseAnalysisService(
+      detector,
+      PoseCacheRepository(
+        ClipRepository(documentsDirectoryProvider: () async => directory),
+      ),
+    );
+    await service
+        .analyzeClip(clipId: 'a', framePaths: <String>['/tmp/a.jpg'])
+        .result;
+    expect(detector.calls, 1);
+    await service
+        .analyzeClip(clipId: 'a', framePaths: <String>['/tmp/a.jpg'])
+        .result;
+    expect(detector.calls, 2);
+  });
+
+  test('同時の解析は検出を重ねない', () async {
+    final directory = await Directory.systemTemp.createTemp('pose_serial_');
+    addTearDown(() async {
+      if (await directory.exists()) {
+        await directory.delete(recursive: true);
+      }
+    });
+    final detector = _OverlapDetector();
+    final service = PoseAnalysisService(
+      detector,
+      PoseCacheRepository(
+        ClipRepository(documentsDirectoryProvider: () async => directory),
+      ),
+    );
+    final first = service.analyzeClip(
+      clipId: 'a',
+      framePaths: <String>['/tmp/a.jpg'],
+    );
+    final second = service.analyzeClip(
+      clipId: 'b',
+      framePaths: <String>['/tmp/b.jpg'],
+    );
+    await Future.wait(<Future<void>>[first.result, second.result]);
+    expect(detector.maxInFlight, 1);
+    expect(detector.calls, 2);
+  });
+}
+
+class _FlakyDetector implements PoseDetectorClient {
+  int calls = 0;
+
+  @override
+  bool get isSupported => true;
+
+  @override
+  Future<PoseFrame?> detect(String imagePath) async {
+    calls += 1;
+    if (calls == 1) {
+      throw StateError('pigeon busy');
+    }
+    return const PoseFrame(
+      imageWidth: 10,
+      imageHeight: 10,
+      landmarks: <PoseJoint, PosePoint>{
+        PoseJoint.nose: PosePoint(x: 0.5, y: 0.2, visibility: 1),
+      },
+    );
+  }
+
+  @override
+  Future<void> close() async {}
+}
+
+class _OverlapDetector implements PoseDetectorClient {
+  int calls = 0;
+  int inFlight = 0;
+  int maxInFlight = 0;
+
+  @override
+  bool get isSupported => true;
+
+  @override
+  Future<PoseFrame?> detect(String imagePath) async {
+    calls += 1;
+    inFlight += 1;
+    if (inFlight > maxInFlight) {
+      maxInFlight = inFlight;
+    }
+    await Future<void>.delayed(const Duration(milliseconds: 30));
+    inFlight -= 1;
+    return const PoseFrame(
+      imageWidth: 10,
+      imageHeight: 10,
+      landmarks: <PoseJoint, PosePoint>{
+        PoseJoint.nose: PosePoint(x: 0.5, y: 0.2, visibility: 1),
+      },
+    );
+  }
+
+  @override
+  Future<void> close() async {}
 }
 
 class _CountingDetector implements PoseDetectorClient {

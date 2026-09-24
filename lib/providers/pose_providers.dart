@@ -4,6 +4,7 @@ import '../pose/pose_analysis_service.dart';
 import '../pose/pose_clip_exporter.dart';
 import '../pose/pose_detector_client.dart';
 import '../pose/pose_export_sharer.dart';
+import '../pose/pose_motion_range.dart';
 import 'clip_providers.dart';
 import 'frame_extraction_providers.dart';
 
@@ -22,6 +23,10 @@ final poseAnalysisServiceProvider = Provider<PoseAnalysisService>((ref) {
     ref.watch(poseDetectorClientProvider),
     ref.watch(poseCacheRepositoryProvider),
   );
+});
+
+final motionRangeAnalyzerProvider = Provider<MotionRangeAnalyzer>((ref) {
+  return PoseMotionRangeAnalyzer(ref.watch(poseAnalysisServiceProvider));
 });
 
 final poseExportSharerProvider = Provider<PoseExportSharer>((ref) {
