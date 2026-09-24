@@ -74,8 +74,8 @@ SubjectFollow followSubject({
   return SubjectFollow(scale: scale, centerX: center?.x, centerY: center?.y);
 }
 
-/// While the person is in frame, keep them. After the last detection, release
-/// the frame so they can leave. A short miss in the middle keeps the last look.
+/// One framing for the clip, taken from the last pose before the person
+/// leaves. Frames after that pose return to the original view.
 SubjectFollow playbackFollow({
   required List<PoseFrame?> poses,
   required int index,
@@ -87,19 +87,16 @@ SubjectFollow playbackFollow({
   if (reference == null) {
     return SubjectFollow.identity;
   }
-  if (personIsInFrame(poses[index])) {
-    return followSubject(pose: poses[index], referenceSize: reference);
-  }
-  final returnsLater = poses.skip(index + 1).any(personIsInFrame);
-  if (!returnsLater) {
-    return SubjectFollow.identity;
-  }
-  for (var earlier = index - 1; earlier >= 0; earlier--) {
-    if (personIsInFrame(poses[earlier])) {
-      return followSubject(pose: poses[earlier], referenceSize: reference);
+  var last = -1;
+  for (var i = 0; i < poses.length; i++) {
+    if (personIsInFrame(poses[i])) {
+      last = i;
     }
   }
-  return SubjectFollow.identity;
+  if (last < 0 || index > last) {
+    return SubjectFollow.identity;
+  }
+  return followSubject(pose: poses[last], referenceSize: reference);
 }
 
 double? referenceSubjectSize(Iterable<PoseFrame?> poses) {

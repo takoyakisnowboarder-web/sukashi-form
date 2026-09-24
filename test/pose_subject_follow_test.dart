@@ -31,22 +31,16 @@ void main() {
     expect(referenceSubjectSize(const <PoseFrame?>[null]), isNull);
   });
 
-  test('人が写っているあいだは追い、最後にいなくなったら拡大をやめる', () {
+  test('消える直前の骨格で拡大を固定し、いなくなったら元に戻す', () {
     final near = _body(shoulderY: 0.2, hipY: 0.5, ankleY: 0.85);
     final far = _body(shoulderY: 0.35, hipY: 0.5, ankleY: 0.68);
     final poses = <PoseFrame?>[null, near, far, null];
+    final fixed = playbackFollow(poses: poses, index: 2);
 
-    expect(playbackFollow(poses: poses, index: 0), SubjectFollow.identity);
-    expect(playbackFollow(poses: poses, index: 2).scale, greaterThan(1));
+    expect(fixed.scale, greaterThan(1));
+    expect(playbackFollow(poses: poses, index: 0), fixed);
+    expect(playbackFollow(poses: poses, index: 1), fixed);
     expect(playbackFollow(poses: poses, index: 3), SubjectFollow.identity);
-  });
-
-  test('途中の取りこぼしは直前の画角を保つ', () {
-    final near = _body(shoulderY: 0.2, hipY: 0.5, ankleY: 0.85);
-    final poses = <PoseFrame?>[near, null, near];
-    final held = playbackFollow(poses: poses, index: 1);
-    expect(held.scale, 1);
-    expect(held.centerX, isNotNull);
   });
 
   test('クリップ内の一番大きい体を基準にする', () {
