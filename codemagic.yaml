@@ -35,38 +35,8 @@ workflows:
         script: flutter pub get
       - name: CocoaPods を取得
         script: |
-          # Podfile は Generated.xcconfig の FLUTTER_ROOT だけ見る。
-          # Windows の C:\Users\... が残っていると Mac で podhelper を読めない。
-          # この段階では署名しない（証明書は後の IPA ビルドで付ける）。
-          # CDN の HTTP/2 切断 (curl 92) は再試行する。
-          FLUTTER_SDK="$(flutter sdk-path)"
-          if [ ! -f "$FLUTTER_SDK/packages/flutter_tools/bin/podhelper" ]; then
-            echo "podhelper が見つからない: $FLUTTER_SDK"
-            exit 1
-          fi
-          mkdir -p ios/Flutter
-          {
-            echo "FLUTTER_ROOT=$FLUTTER_SDK"
-            echo "FLUTTER_APPLICATION_PATH=$PWD"
-            echo "COCOAPODS_PARALLEL_CODE_SIGN=true"
-            echo "FLUTTER_TARGET=lib/main.dart"
-            echo "FLUTTER_BUILD_DIR=build"
-            echo "PACKAGE_CONFIG=.dart_tool/package_config.json"
-          } > ios/Flutter/Generated.xcconfig
-          echo "FLUTTER_ROOT=$FLUTTER_SDK"
-          printf '%s\n' '--http1.1' '--retry' '5' '--retry-delay' '3' >> "$HOME/.curlrc"
-          attempt=1
-          while [ "$attempt" -le 5 ]; do
-            if (cd ios && pod install --repo-update); then
-              exit 0
-            fi
-            echo "pod install 失敗 ($attempt/5)。途中キャッシュを捨てて再試行します。"
-            pod cache clean --all || true
-            rm -rf ios/Pods
-            attempt=$((attempt + 1))
-            sleep $((attempt * 8))
-          done
-          exit 1
+          # Windows の Generated.xcconfig は使わない。署名は後の IPA で行う。
+          bash tool/codemagic_pod_install.sh
       - name: キーチェーン初期化
         script: keychain initialize
       - name: 署名ファイルを取得・作成
@@ -128,35 +98,7 @@ workflows:
       - name: Flutter パッケージ取得
         script: flutter pub get
       - name: CocoaPods を取得
-        script: |
-          FLUTTER_SDK="$(flutter sdk-path)"
-          if [ ! -f "$FLUTTER_SDK/packages/flutter_tools/bin/podhelper" ]; then
-            echo "podhelper が見つからない: $FLUTTER_SDK"
-            exit 1
-          fi
-          mkdir -p ios/Flutter
-          {
-            echo "FLUTTER_ROOT=$FLUTTER_SDK"
-            echo "FLUTTER_APPLICATION_PATH=$PWD"
-            echo "COCOAPODS_PARALLEL_CODE_SIGN=true"
-            echo "FLUTTER_TARGET=lib/main.dart"
-            echo "FLUTTER_BUILD_DIR=build"
-            echo "PACKAGE_CONFIG=.dart_tool/package_config.json"
-          } > ios/Flutter/Generated.xcconfig
-          echo "FLUTTER_ROOT=$FLUTTER_SDK"
-          printf '%s\n' '--http1.1' '--retry' '5' '--retry-delay' '3' >> "$HOME/.curlrc"
-          attempt=1
-          while [ "$attempt" -le 5 ]; do
-            if (cd ios && pod install --repo-update); then
-              exit 0
-            fi
-            echo "pod install 失敗 ($attempt/5)。途中キャッシュを捨てて再試行します。"
-            pod cache clean --all || true
-            rm -rf ios/Pods
-            attempt=$((attempt + 1))
-            sleep $((attempt * 8))
-          done
-          exit 1
+        script: bash tool/codemagic_pod_install.sh
       - name: シミュレータ向けにビルド(署名不要)
         script: flutter build ios --simulator --debug
       - name: シミュレータでスクリーンショットを撮影
