@@ -18,6 +18,7 @@ import 'package:sukashi_form/pose/pose_detector_client.dart';
 import 'package:sukashi_form/pose/pose_export.dart';
 import 'package:sukashi_form/pose/pose_export_sharer.dart';
 import 'package:sukashi_form/pose/pose_model.dart';
+import 'package:sukashi_form/pose/pose_subject_follow.dart';
 import 'package:sukashi_form/providers/clip_providers.dart';
 import 'package:sukashi_form/providers/pose_providers.dart';
 import 'package:sukashi_form/screens/compare_screen.dart';
@@ -161,6 +162,28 @@ void main() {
     expect(rotation.transform.storage[0], closeTo(math.cos(0.25), 0.0001));
     final image = tester.widget<Image>(find.byKey(const Key('frame-image-a')));
     expect((image.image as ResizeImage).width, 640);
+  });
+
+  testWidgets('距離合わせは位置合わせの拡大の上にさらに拡大する', (tester) async {
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: SizedBox(
+          width: 300,
+          height: 200,
+          child: ComparisonFrameView(
+            clipId: 'a',
+            path: 'missing.jpg',
+            transform: AlignmentTransform(scale: 1.5),
+            cacheWidth: 640,
+            follow: SubjectFollow(scale: 2, centerX: 0.4, centerY: 0.6),
+          ),
+        ),
+      ),
+    );
+    final scale = tester.widget<Transform>(
+      find.byKey(const Key('frame-scale-a')),
+    );
+    expect(scale.transform.storage[0], 3);
   });
 
   testWidgets('モード切替で時刻と変換を維持し透過と分割軸を保存する', (tester) async {
@@ -606,6 +629,28 @@ void main() {
     expect(find.byKey(const Key('pose-skeleton-b')), findsOneWidget);
   });
 
+  testWidgets('距離合わせが設定でオンになっている', (tester) async {
+    await _pump(
+      tester,
+      <Clip>[_clip('a', 5000), _clip('b', 5000)],
+      (_) => _completedSession(),
+      clipRepository,
+      pairRepository,
+    );
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 100)),
+    );
+    await _pumpFrames(tester, 20);
+    await _openSettings(tester);
+    await tester.ensureVisible(find.byKey(const Key('follow-distance-toggle')));
+    expect(
+      tester
+          .widget<Switch>(find.byKey(const Key('follow-distance-toggle')))
+          .value,
+      isTrue,
+    );
+  });
+
   testWidgets('Aの座標書き出しでJSONファイルを共有する', (tester) async {
     final detector = _FakePoseDetector();
     final sharer = _RecordingPoseExportSharer();
@@ -769,9 +814,7 @@ class _MemoryPoseCache extends PoseCacheRepository {
 
   @override
   Future<Map<String, PoseFrame>> load(String clipId) async {
-    return Map<String, PoseFrame>.of(
-      _store[clipId] ?? <String, PoseFrame>{},
-    );
+    return Map<String, PoseFrame>.of(_store[clipId] ?? <String, PoseFrame>{});
   }
 
   @override

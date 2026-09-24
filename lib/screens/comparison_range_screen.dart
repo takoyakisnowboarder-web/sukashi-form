@@ -209,9 +209,8 @@ class _ComparisonRangeScreenState extends ConsumerState<ComparisonRangeScreen> {
       );
     } on Object {
       if (fromUser && mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('動作区間を探せませんでした。')));
+        ScaffoldMessenger.of(context)
+            .showSnackBar(const SnackBar(content: Text('動作区間を探せませんでした。')));
       }
     } finally {
       if (mounted && generation == _detectGeneration) {
@@ -248,7 +247,8 @@ class _ComparisonRangeScreenState extends ConsumerState<ComparisonRangeScreen> {
       title: const Text('比較範囲について'),
       content: const Text(
         '動画そのものは切り取られません。比較に使う範囲を選ぶだけなので、あとから何度でも変更できます。'
-        '撮影は最大30秒です。「動作区間を自動で切る」は、その中で動きが大きいところを10秒以内で提案します。',
+        '撮影は最大30秒です。「動作区間を自動で切る」は、動きが大きいところの前後を'
+        '8秒以上10秒以内で提案します。',
       ),
       actions: <Widget>[
         TextButton(
@@ -317,9 +317,9 @@ class _ComparisonRangeScreenState extends ConsumerState<ComparisonRangeScreen> {
                                       _error!,
                                       textAlign: TextAlign.center,
                                       style: TextStyle(
-                                        color: Theme.of(
-                                          context,
-                                        ).colorScheme.errorContainer,
+                                        color: Theme.of(context)
+                                            .colorScheme
+                                            .errorContainer,
                                       ),
                                     ),
                                   )
@@ -357,9 +357,9 @@ class _ComparisonRangeScreenState extends ConsumerState<ComparisonRangeScreen> {
                             _PreviewStrip(paths: preview.absoluteFramePaths)
                           else
                             ColoredBox(
-                              color: Theme.of(
-                                context,
-                              ).colorScheme.surfaceContainerHighest,
+                              color: Theme.of(context)
+                                  .colorScheme
+                                  .surfaceContainerHighest,
                             ),
                           RangeSlider(
                             key: const Key('comparison-range-slider'),

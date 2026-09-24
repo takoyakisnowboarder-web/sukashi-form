@@ -7,8 +7,8 @@ import 'pose_model.dart';
 /// In-app recording is 5/10/20/30s. Auto-cut is tuned for those source lengths.
 const motionRangeSourceMaxDurationMs = 30000;
 const motionRangeMaxDurationMs = 10000;
-const motionRangeMinDurationMs = 2000;
-const motionRangePaddingMs = 600;
+const motionRangeMinDurationMs = 8000;
+const motionRangePaddingMs = 1500;
 const motionRangePreviewCacheSuffix = '__range_preview';
 
 /// Normalized image units per second. Below this, treat the clip as idle.

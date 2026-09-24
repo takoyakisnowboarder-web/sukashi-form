@@ -29,12 +29,31 @@ void main() {
     );
 
     expect(guess, isNotNull);
-    expect(guess!.endMs - guess.startMs, lessThanOrEqualTo(10000));
+    expect(guess!.endMs - guess.startMs, greaterThanOrEqualTo(8000));
+    expect(guess.endMs - guess.startMs, lessThanOrEqualTo(10000));
     expect(guess.startMs, greaterThanOrEqualTo(0));
     expect(guess.endMs, lessThanOrEqualTo(20000));
     expect(guess.peakMs, inInclusiveRange(guess.startMs, guess.endMs));
     expect(guess.startMs, lessThan(12000));
     expect(guess.endMs, greaterThan(8000));
+  });
+
+  test('短い山場でも20秒録画なら8秒以上を残す', () {
+    final times = _previewTimes(durationMs: 20000);
+    final poses = <PoseFrame?>[
+      for (var i = 0; i < times.length; i++) _pose(hipX: i == 10 ? 0.85 : 0.2),
+    ];
+
+    final guess = guessMotionRange(
+      timesMs: times,
+      poses: poses,
+      clipDurationMs: 20000,
+    );
+
+    expect(guess, isNotNull);
+    expect(guess!.endMs - guess.startMs, greaterThanOrEqualTo(8000));
+    expect(guess.endMs - guess.startMs, lessThanOrEqualTo(10000));
+    expect(guess.peakMs, inInclusiveRange(guess.startMs, guess.endMs));
   });
 
   test('30秒録画で動きが長いときは山場を含む10秒に収める', () {

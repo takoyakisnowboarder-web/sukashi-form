@@ -18,6 +18,7 @@ import '../pose/pose_export_sharer.dart';
 import '../pose/pose_movement_dialog.dart';
 import '../pose/pose_model.dart';
 import '../pose/pose_skeleton_painter.dart';
+import '../pose/pose_subject_follow.dart';
 import '../providers/clip_providers.dart';
 import '../providers/frame_extraction_providers.dart';
 import '../providers/pose_providers.dart';
@@ -68,7 +69,9 @@ class _CompareScreenState extends ConsumerState<CompareScreen>
   AlignmentTransform? _gestureStartTransform;
   Offset? _gestureStartFocalPoint;
   bool _poseEnabled = false;
+  bool _followDistance = true;
   bool _poseAnalyzing = false;
+  final Map<String, SubjectFollow> _lastFollow = <String, SubjectFollow>{};
   int _poseSession = 0;
   String _poseProgressLabel = '';
   final Map<String, PoseFrame> _poses = <String, PoseFrame>{};
@@ -221,6 +224,9 @@ class _CompareScreenState extends ConsumerState<CompareScreen>
       _alignmentTargetClipId = tracks[1].clipId;
       _precacheUpcoming(_controller!);
       setState(() {});
+      if (_followDistance) {
+        unawaited(_ensurePoses(_controller!));
+      }
     } on FrameExtractionCancelled {
       // Leaving the screen intentionally cancels preparation.
     } on Object catch (error) {
@@ -249,25 +255,77 @@ class _CompareScreenState extends ConsumerState<CompareScreen>
     return _poses[path];
   }
 
+  Future<void> _ensurePoses(ComparisonController controller) async {
+    final detector = ref.read(poseDetectorClientProvider);
+    if (!detector.isSupported || _poseAnalyzing) {
+      return;
+    }
+    await _analyzePoses(controller);
+  }
+
+  Future<void> _setFollowDistance(
+    bool enabled,
+    ComparisonController controller,
+  ) async {
+    setState(() => _followDistance = enabled);
+    if (!enabled) {
+      _lastFollow.clear();
+      return;
+    }
+    await _ensurePoses(controller);
+  }
+
+  SubjectFollow _followFor(String clipId, String path) {
+    if (!_followDistance) {
+      return SubjectFollow.identity;
+    }
+    final controller = _controller;
+    if (controller == null) {
+      return SubjectFollow.identity;
+    }
+    ComparisonTrack? track;
+    if (controller.trackA.clipId == clipId) {
+      track = controller.trackA;
+    } else if (controller.trackB.clipId == clipId) {
+      track = controller.trackB;
+    }
+    if (track == null) {
+      return SubjectFollow.identity;
+    }
+    final reference = referenceSubjectSize([
+      for (final frame in track.frames) _poses[frame.path],
+    ]);
+    if (reference == null) {
+      return _lastFollow[clipId] ?? SubjectFollow.identity;
+    }
+    final follow = followSubject(pose: _poses[path], referenceSize: reference);
+    if (follow != SubjectFollow.identity) {
+      _lastFollow[clipId] = follow;
+      return follow;
+    }
+    return _lastFollow[clipId] ?? SubjectFollow.identity;
+  }
+
   Future<void> _setPoseEnabled(
     bool enabled,
     ComparisonController controller,
   ) async {
     if (!enabled) {
-      _poseSession += 1;
-      setState(() {
-        _poseEnabled = false;
-        _poseAnalyzing = false;
-        _poseProgressLabel = '';
-      });
+      setState(() => _poseEnabled = false);
+      if (!_followDistance) {
+        _poseSession += 1;
+        setState(() {
+          _poseAnalyzing = false;
+          _poseProgressLabel = '';
+        });
+      }
       return;
     }
     final detector = ref.read(poseDetectorClientProvider);
     if (!detector.isSupported) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('この端末では骨格解析を実行できません。')));
+        ScaffoldMessenger.of(context)
+            .showSnackBar(const SnackBar(content: Text('この端末では骨格解析を実行できません。')));
       }
       return;
     }
@@ -287,7 +345,10 @@ class _CompareScreenState extends ConsumerState<CompareScreen>
         controller.trackA,
         controller.trackB,
       ]) {
-        if (!mounted || sessionId != _poseSession || !_poseEnabled) {
+        if (!mounted || sessionId != _poseSession) {
+          return;
+        }
+        if (!_poseEnabled && !_followDistance) {
           return;
         }
         clipIndex += 1;
@@ -299,9 +360,8 @@ class _CompareScreenState extends ConsumerState<CompareScreen>
       }
     } on Object {
       if (mounted && sessionId == _poseSession) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('骨格解析に失敗しました。')));
+        ScaffoldMessenger.of(context)
+            .showSnackBar(const SnackBar(content: Text('骨格解析に失敗しました。')));
       }
     } finally {
       if (mounted && sessionId == _poseSession) {
@@ -374,9 +434,8 @@ class _CompareScreenState extends ConsumerState<CompareScreen>
     final clip = _clipById(track.clipId);
     if (clip == null) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('クリップ情報を取得できませんでした。')));
+        ScaffoldMessenger.of(context)
+            .showSnackBar(const SnackBar(content: Text('クリップ情報を取得できませんでした。')));
       }
       return;
     }
@@ -410,9 +469,8 @@ class _CompareScreenState extends ConsumerState<CompareScreen>
           );
     } on Object {
       if (mounted && sessionId == _poseSession) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('座標データの書き出しに失敗しました。')));
+        ScaffoldMessenger.of(context)
+            .showSnackBar(const SnackBar(content: Text('座標データの書き出しに失敗しました。')));
       }
     } finally {
       if (mounted && sessionId == _poseSession) {
@@ -801,7 +859,7 @@ class _CompareScreenState extends ConsumerState<CompareScreen>
                       ? 'A'
                       : 'B',
                 ),
-              if (_poseEnabled) _poseHud(frameA, frameB),
+              if (_poseEnabled) _poseHud(frameA, frameB) else _followProgress(),
             ],
           ),
         ),
@@ -832,8 +890,25 @@ class _CompareScreenState extends ConsumerState<CompareScreen>
           _splitAxis == ComparisonSplitAxis.vertical
               ? Column(children: panels)
               : Row(children: panels),
-          if (_poseEnabled) _poseHud(frameA, frameB),
+          if (_poseEnabled) _poseHud(frameA, frameB) else _followProgress(),
         ],
+      ),
+    );
+  }
+
+  Widget _followProgress() {
+    if (!_followDistance || _poseProgressLabel.isEmpty) {
+      return const SizedBox.shrink();
+    }
+    return Positioned(
+      left: 8,
+      right: 8,
+      bottom: 8,
+      child: Text(
+        _poseProgressLabel,
+        key: const Key('pose-analysis-progress'),
+        textAlign: TextAlign.center,
+        style: const TextStyle(color: Colors.white, fontSize: 12),
       ),
     );
   }
@@ -920,6 +995,7 @@ class _CompareScreenState extends ConsumerState<CompareScreen>
           cacheWidth: _decodeWidth,
           pose: _poseFor(frame.path),
           skeletonColor: label == 'A' ? _poseColorA : _poseColorB,
+          follow: _followFor(clipId, frame.path),
         ),
         Positioned(
           left: 8,
@@ -1049,6 +1125,8 @@ class _CompareScreenState extends ConsumerState<CompareScreen>
         '透過の操作対象と比較グリッドは、設定から選べます。\n\n'
         '骨格表示をオンにすると、端末内だけで頭・肩・腰・膝・足元の点を推定し、'
         '関節角度を表示します。映像は外部へ送信されません。\n\n'
+        '「遠ざかったら拡大」は同じ骨格から体の見かけの大きさを見て、'
+        '奥に小さくなったコマだけ拡大します。\n\n'
         '座標の保存は1本ずつです。保存の前に「この動作は何ですか？」と聞きます。'
         '種目と技を書くと、AIが座標の意味を読みやすくなります。',
       ),
@@ -1261,6 +1339,16 @@ class _CompareScreenState extends ConsumerState<CompareScreen>
                           value: _poseEnabled,
                           onChanged: (enabled) =>
                               unawaited(_setPoseEnabled(enabled, controller)),
+                        ),
+                      ),
+                      _settingsRow(
+                        label: '距離合わせ',
+                        child: Switch(
+                          key: const Key('follow-distance-toggle'),
+                          value: _followDistance,
+                          onChanged: (enabled) => unawaited(
+                            _setFollowDistance(enabled, controller),
+                          ),
                         ),
                       ),
                       _settingsRow(
