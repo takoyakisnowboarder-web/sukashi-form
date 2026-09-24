@@ -256,9 +256,18 @@ class _CompareScreenState extends ConsumerState<CompareScreen>
     return _poses[path];
   }
 
+  bool _hasPosesForTrack(ComparisonTrack track) {
+    return track.frames.isNotEmpty &&
+        track.frames.every((frame) => _poses.containsKey(frame.path));
+  }
+
   Future<void> _ensurePoses(ComparisonController controller) async {
     final detector = ref.read(poseDetectorClientProvider);
     if (!detector.isSupported) {
+      return;
+    }
+    if (_hasPosesForTrack(controller.trackA) &&
+        _hasPosesForTrack(controller.trackB)) {
       return;
     }
     final inFlight = _poseAnalysisFuture;
@@ -461,7 +470,7 @@ class _CompareScreenState extends ConsumerState<CompareScreen>
       return;
     }
     final controller = _controller;
-    if (controller != null) {
+    if (controller != null && !_hasPosesForTrack(track)) {
       await _ensurePoses(controller);
     }
     if (!mounted) {

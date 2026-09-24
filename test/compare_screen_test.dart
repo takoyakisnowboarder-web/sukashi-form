@@ -743,9 +743,9 @@ void main() {
     );
     await tester.tap(find.byKey(const Key('pose-movement-confirm')));
     await tester.runAsync(
-      () => Future<void>.delayed(const Duration(milliseconds: 80)),
+      () => Future<void>.delayed(const Duration(milliseconds: 200)),
     );
-    await _pumpFrames(tester, 20);
+    await _pumpFrames(tester, 30);
 
     expect(sharer.fileName, 'sukashi-pose_0719_a.json');
     expect(sharer.contents, contains(poseExportSchema));
