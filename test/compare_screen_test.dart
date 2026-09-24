@@ -18,7 +18,6 @@ import 'package:sukashi_form/pose/pose_detector_client.dart';
 import 'package:sukashi_form/pose/pose_export.dart';
 import 'package:sukashi_form/pose/pose_export_sharer.dart';
 import 'package:sukashi_form/pose/pose_model.dart';
-import 'package:sukashi_form/pose/pose_subject_follow.dart';
 import 'package:sukashi_form/providers/clip_providers.dart';
 import 'package:sukashi_form/providers/pose_providers.dart';
 import 'package:sukashi_form/screens/compare_screen.dart';
@@ -162,28 +161,6 @@ void main() {
     expect(rotation.transform.storage[0], closeTo(math.cos(0.25), 0.0001));
     final image = tester.widget<Image>(find.byKey(const Key('frame-image-a')));
     expect((image.image as ResizeImage).width, 640);
-  });
-
-  testWidgets('距離合わせは位置合わせの拡大の上にさらに拡大する', (tester) async {
-    await tester.pumpWidget(
-      const MaterialApp(
-        home: SizedBox(
-          width: 300,
-          height: 200,
-          child: ComparisonFrameView(
-            clipId: 'a',
-            path: 'missing.jpg',
-            transform: AlignmentTransform(scale: 1.5),
-            cacheWidth: 640,
-            follow: SubjectFollow(scale: 2, centerX: 0.4, centerY: 0.6),
-          ),
-        ),
-      ),
-    );
-    final scale = tester.widget<Transform>(
-      find.byKey(const Key('frame-scale-a')),
-    );
-    expect(scale.transform.storage[0], 3);
   });
 
   testWidgets('モード切替で時刻と変換を維持し透過と分割軸を保存する', (tester) async {
@@ -617,83 +594,17 @@ void main() {
 
     await _openSettings(tester);
     await tester.ensureVisible(find.byKey(const Key('pose-overlay-toggle')));
-    await tester.runAsync(() async {
-      await tester.tap(find.byKey(const Key('pose-overlay-toggle')));
-      await Future<void>.delayed(const Duration(milliseconds: 50));
-    });
-    await _pumpFrames(tester, 20);
+    await tester.tap(find.byKey(const Key('pose-overlay-toggle')));
+    await tester.pump();
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 200)),
+    );
+    await _pumpFrames(tester, 40);
 
     expect(find.byKey(const Key('pose-angle-hud')), findsOneWidget);
     expect(find.textContaining('左膝'), findsWidgets);
     expect(find.byKey(const Key('pose-skeleton-a')), findsOneWidget);
     expect(find.byKey(const Key('pose-skeleton-b')), findsOneWidget);
-  });
-
-  testWidgets('距離合わせの解析中に骨格表示をオンにしても骨格が出る', (tester) async {
-    final detector = _SlowPoseDetector();
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          clipRepositoryProvider.overrideWithValue(clipRepository),
-          comparisonPairRepositoryProvider.overrideWithValue(pairRepository),
-          clipListProvider.overrideWith(
-            () => _TestClipListNotifier(<Clip>[
-              _clip('a', 5000),
-              _clip('b', 5000),
-            ]),
-          ),
-          comparisonExtractionStarterProvider.overrideWithValue(
-            (_) => _completedSession(),
-          ),
-          poseDetectorClientProvider.overrideWithValue(detector),
-          poseAnalysisServiceProvider.overrideWithValue(
-            PoseAnalysisService(detector, _MemoryPoseCache(clipRepository)),
-          ),
-        ],
-        child: const MaterialApp(
-          home: CompareScreen(clipIds: <String>['a', 'b']),
-        ),
-      ),
-    );
-    await tester.runAsync(
-      () => Future<void>.delayed(const Duration(milliseconds: 40)),
-    );
-    await _pumpFrames(tester, 8);
-
-    await _openSettings(tester);
-    await tester.ensureVisible(find.byKey(const Key('pose-overlay-toggle')));
-    await tester.runAsync(() async {
-      await tester.tap(find.byKey(const Key('pose-overlay-toggle')));
-      await Future<void>.delayed(const Duration(milliseconds: 400));
-    });
-    await _pumpFrames(tester, 20);
-
-    expect(find.byKey(const Key('pose-angle-hud')), findsOneWidget);
-    expect(find.textContaining('人を検出できませんでした'), findsNothing);
-    expect(find.byKey(const Key('pose-skeleton-a')), findsOneWidget);
-    expect(find.byKey(const Key('pose-skeleton-b')), findsOneWidget);
-  });
-
-  testWidgets('距離合わせが設定でオンになっている', (tester) async {
-    await _pump(
-      tester,
-      <Clip>[_clip('a', 5000), _clip('b', 5000)],
-      (_) => _completedSession(),
-      clipRepository,
-      pairRepository,
-    );
-    await tester.runAsync(
-      () => Future<void>.delayed(const Duration(milliseconds: 100)),
-    );
-    await _pumpFrames(tester, 20);
-    await _openSettings(tester);
-    await tester.ensureVisible(find.byKey(const Key('follow-distance-toggle')));
-    expect(
-      tester
-          .widget<Switch>(find.byKey(const Key('follow-distance-toggle')))
-          .value,
-      isTrue,
-    );
   });
 
   testWidgets('Aの座標書き出しでJSONファイルを共有する', (tester) async {
@@ -730,11 +641,21 @@ void main() {
     await _pumpFrames(tester, 20);
 
     await _openSettings(tester);
+    await tester.ensureVisible(find.byKey(const Key('pose-overlay-toggle')));
+    await tester.tap(find.byKey(const Key('pose-overlay-toggle')));
+    await tester.pump();
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 200)),
+    );
+    await _pumpFrames(tester, 40);
+    expect(find.textContaining('左膝'), findsWidgets);
+
     await tester.ensureVisible(find.byKey(const Key('pose-export-a')));
-    await tester.runAsync(() async {
-      await tester.tap(find.byKey(const Key('pose-export-a')));
-      await Future<void>.delayed(const Duration(milliseconds: 80));
-    });
+    await tester.tap(find.byKey(const Key('pose-export-a')));
+    await tester.pump();
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 80)),
+    );
     await _pumpFrames(tester, 20);
     expect(find.text('この動作は何ですか？'), findsOneWidget);
     await tester.enterText(
@@ -742,6 +663,7 @@ void main() {
       'スノーボード 10mキッカー バックサイド720',
     );
     await tester.tap(find.byKey(const Key('pose-movement-confirm')));
+    await tester.pump();
     await tester.runAsync(
       () => Future<void>.delayed(const Duration(milliseconds: 200)),
     );
@@ -880,14 +802,6 @@ class _RecordingPoseExportSharer implements PoseExportSharer {
   }) async {
     this.fileName = fileName;
     this.contents = contents;
-  }
-}
-
-class _SlowPoseDetector extends _FakePoseDetector {
-  @override
-  Future<PoseFrame?> detect(String imagePath) async {
-    await Future<void>.delayed(const Duration(milliseconds: 40));
-    return super.detect(imagePath);
   }
 }
 

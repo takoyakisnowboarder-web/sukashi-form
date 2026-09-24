@@ -104,9 +104,7 @@ class PoseAnalysisService {
     required List<String> framePaths,
   }) {
     final cancelled = _CancelFlag();
-    final progress = StreamController<PoseAnalysisProgress>.broadcast(
-      sync: true,
-    );
+    final progress = StreamController<PoseAnalysisProgress>.broadcast();
     final previous = _queue;
     final result = () async {
       await previous;
@@ -118,7 +116,9 @@ class PoseAnalysisService {
           progress: progress,
         );
       } finally {
-        await progress.close();
+        if (!progress.isClosed) {
+          unawaited(progress.close());
+        }
       }
     }();
     _queue = result.then((_) {}, onError: (_) {});
