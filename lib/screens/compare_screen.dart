@@ -324,8 +324,9 @@ class _CompareScreenState extends ConsumerState<CompareScreen>
     final detector = ref.read(poseDetectorClientProvider);
     if (!detector.isSupported) {
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(const SnackBar(content: Text('この端末では骨格解析を実行できません。')));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('この端末では骨格解析を実行できません。')));
       }
       return;
     }
@@ -360,8 +361,9 @@ class _CompareScreenState extends ConsumerState<CompareScreen>
       }
     } on Object {
       if (mounted && sessionId == _poseSession) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(const SnackBar(content: Text('骨格解析に失敗しました。')));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('骨格解析に失敗しました。')));
       }
     } finally {
       if (mounted && sessionId == _poseSession) {
@@ -434,8 +436,9 @@ class _CompareScreenState extends ConsumerState<CompareScreen>
     final clip = _clipById(track.clipId);
     if (clip == null) {
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(const SnackBar(content: Text('クリップ情報を取得できませんでした。')));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('クリップ情報を取得できませんでした。')));
       }
       return;
     }
@@ -469,8 +472,9 @@ class _CompareScreenState extends ConsumerState<CompareScreen>
           );
     } on Object {
       if (mounted && sessionId == _poseSession) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(const SnackBar(content: Text('座標データの書き出しに失敗しました。')));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('座標データの書き出しに失敗しました。')));
       }
     } finally {
       if (mounted && sessionId == _poseSession) {
@@ -1367,46 +1371,38 @@ class _CompareScreenState extends ConsumerState<CompareScreen>
                               children: <Widget>[
                                 FilledButton.tonal(
                                   key: const Key('pose-export-a'),
-                                  onPressed: _poseAnalyzing
-                                      ? null
-                                      : () {
-                                          final box =
-                                              sheetContext.findRenderObject()
-                                                  as RenderBox?;
-                                          unawaited(
-                                            _exportPoseTrack(
-                                              controller.trackA,
-                                              sharePositionOrigin: box == null
-                                                  ? null
-                                                  : box.localToGlobal(
-                                                          Offset.zero,
-                                                        ) &
-                                                        box.size,
-                                            ),
-                                          );
-                                        },
+                                  onPressed: () {
+                                    final box =
+                                        sheetContext.findRenderObject()
+                                            as RenderBox?;
+                                    unawaited(
+                                      _exportPoseTrack(
+                                        controller.trackA,
+                                        sharePositionOrigin: box == null
+                                            ? null
+                                            : box.localToGlobal(Offset.zero) &
+                                                  box.size,
+                                      ),
+                                    );
+                                  },
                                   child: const Text('Aを保存'),
                                 ),
                                 FilledButton.tonal(
                                   key: const Key('pose-export-b'),
-                                  onPressed: _poseAnalyzing
-                                      ? null
-                                      : () {
-                                          final box =
-                                              sheetContext.findRenderObject()
-                                                  as RenderBox?;
-                                          unawaited(
-                                            _exportPoseTrack(
-                                              controller.trackB,
-                                              sharePositionOrigin: box == null
-                                                  ? null
-                                                  : box.localToGlobal(
-                                                          Offset.zero,
-                                                        ) &
-                                                        box.size,
-                                            ),
-                                          );
-                                        },
+                                  onPressed: () {
+                                    final box =
+                                        sheetContext.findRenderObject()
+                                            as RenderBox?;
+                                    unawaited(
+                                      _exportPoseTrack(
+                                        controller.trackB,
+                                        sharePositionOrigin: box == null
+                                            ? null
+                                            : box.localToGlobal(Offset.zero) &
+                                                  box.size,
+                                      ),
+                                    );
+                                  },
                                   child: const Text('Bを保存'),
                                 ),
                               ],
