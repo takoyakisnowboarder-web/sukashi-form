@@ -33,6 +33,23 @@ workflows:
     scripts:
       - name: Flutter パッケージ取得
         script: flutter pub get
+      - name: CocoaPods を取得
+        script: |
+          # CDN の HTTP/2 切断 (curl 92) で pod install が落ちることがある。
+          printf '%s\n' '--http1.1' '--retry' '5' '--retry-delay' '3' >> "$HOME/.curlrc"
+          cd ios
+          attempt=1
+          while [ "$attempt" -le 5 ]; do
+            if pod install --repo-update; then
+              exit 0
+            fi
+            echo "pod install 失敗 ($attempt/5)。途中キャッシュを捨てて再試行します。"
+            pod cache clean --all || true
+            rm -rf Pods
+            attempt=$((attempt + 1))
+            sleep $((attempt * 8))
+          done
+          exit 1
       - name: キーチェーン初期化
         script: keychain initialize
       - name: 署名ファイルを取得・作成
@@ -93,6 +110,22 @@ workflows:
     scripts:
       - name: Flutter パッケージ取得
         script: flutter pub get
+      - name: CocoaPods を取得
+        script: |
+          printf '%s\n' '--http1.1' '--retry' '5' '--retry-delay' '3' >> "$HOME/.curlrc"
+          cd ios
+          attempt=1
+          while [ "$attempt" -le 5 ]; do
+            if pod install --repo-update; then
+              exit 0
+            fi
+            echo "pod install 失敗 ($attempt/5)。途中キャッシュを捨てて再試行します。"
+            pod cache clean --all || true
+            rm -rf Pods
+            attempt=$((attempt + 1))
+            sleep $((attempt * 8))
+          done
+          exit 1
       - name: シミュレータ向けにビルド(署名不要)
         script: flutter build ios --simulator --debug
       - name: シミュレータでスクリーンショットを撮影
