@@ -1010,7 +1010,7 @@ class _CompareScreenState extends ConsumerState<CompareScreen>
       AlignmentTransform(
         dx: original.dx + delta.dx,
         dy: original.dy + delta.dy,
-        scale: (original.scale * details.scale).clamp(0.25, 4),
+        scale: (original.scale * details.scale).clamp(0.25, 10),
         rotation: original.rotation + details.rotation,
       ),
     );
@@ -1025,7 +1025,7 @@ class _CompareScreenState extends ConsumerState<CompareScreen>
       AlignmentTransform(
         dx: current.dx,
         dy: current.dy,
-        scale: scale.clamp(1, 3),
+        scale: scale.clamp(1, 10),
         rotation: current.rotation,
       ),
     );
@@ -1094,7 +1094,7 @@ class _CompareScreenState extends ConsumerState<CompareScreen>
         '透過は2本を重ね、分割は上下または左右に並べます。\n\n'
         '基準同期では、AとBそれぞれの同じ瞬間を選んで再生位置を揃えます。\n\n'
         '位置合わせでは、ドラッグで移動、ピンチで拡大縮小、2本指で回転できます。\n'
-        '設定の「拡大」でも、操作対象の映像を1倍から3倍まで拡大できます。\n'
+        '設定の「拡大」でも、操作対象の映像を1倍から10倍まで拡大できます。\n'
         '透過の操作対象と比較グリッドは、設定から選べます。\n\n'
         '骨格表示をオンにすると、端末内だけで頭・肩・腰・膝・足元の点を推定し、'
         '関節角度を表示します。映像は外部へ送信されません。\n\n'
@@ -1377,7 +1377,7 @@ class _CompareScreenState extends ConsumerState<CompareScreen>
                             final scale = controller
                                 .transformFor(target)
                                 .scale
-                                .clamp(1.0, 3.0);
+                                .clamp(1.0, 10.0);
                             final label = target == controller.trackA.clipId
                                 ? 'A'
                                 : 'B';
@@ -1388,8 +1388,8 @@ class _CompareScreenState extends ConsumerState<CompareScreen>
                                   child: Slider(
                                     key: const Key('manual-zoom-slider'),
                                     min: 1,
-                                    max: 3,
-                                    divisions: 8,
+                                    max: 10,
+                                    divisions: 18,
                                     value: scale,
                                     onChanged: (value) => refresh(
                                       () => _setManualScale(controller, value),

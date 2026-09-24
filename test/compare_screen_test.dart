@@ -183,11 +183,15 @@ void main() {
     );
     await tester.pump();
     expect(
+      tester.widget<Slider>(find.byKey(const Key('manual-zoom-slider'))).max,
+      10,
+    );
+    expect(
       tester
           .widget<Transform>(find.byKey(const Key('frame-scale-b')))
           .transform
           .storage[0],
-      greaterThan(1.5),
+      closeTo(10, 0.01),
     );
     expect(
       tester
